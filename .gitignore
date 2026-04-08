@@ -15,4 +15,5 @@ Backend/*.sqlite3
 
 # Common
 *.log
-
+**/__pycache__/
+*.pyc

@@ -19,6 +19,16 @@ const isBrokenStatus = (status) => {
   return lower.includes('panne') || lower.includes('out of order') || lower.includes('aver');
 };
 
+const getIcon = (typeObj) => {
+  const t = String(typeObj || '').toLowerCase();
+  if (t.includes('imp')) return 'fa-print';
+  if (t.includes('proj')) return 'fa-video';
+  if (t.includes('pc') || t.includes('ordinateur')) return 'fa-desktop';
+  if (t.includes('wifi') || t.includes('routeur')) return 'fa-wifi';
+  if (t.includes('contrôle') || t.includes('acces') || t.includes('accès')) return 'fa-id-badge';
+  return 'fa-cube';
+};
+
 const Equipment = () => {
   const { t, translateData, locale } = useI18n();
   const { id } = useParams();
@@ -31,19 +41,22 @@ const Equipment = () => {
 
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState({ text: '', type: '' });
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError('');
 
     try {
-      const [detailsRes, queueRes] = await Promise.all([
+      const [detailsRes, queueRes, userRes] = await Promise.all([
         api.get(`/objects/${id}`),
         api.get(`/objects/${id}/queue`),
+        api.get('/users/me').catch(() => ({ data: {} })),
       ]);
 
       setEquipment(detailsRes.data || null);
       setQueueInfo(queueRes.data || null);
+      setIsAdmin(userRes.data?.role === 'Admin');
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setError(typeof detail === 'string' ? detail : t('equipment.notFoundTitle'));
@@ -165,42 +178,99 @@ const Equipment = () => {
   }
 
   const localisation = equipment.localisation || {};
-  const locationText = `${localisation.building || t('equipment.noBuilding')} - ${
-    localisation.floor !== null && localisation.floor !== undefined ? `${t('common.floor')} ${localisation.floor}` : t('equipment.noFloor')
-  } - ${localisation.room || t('equipment.noRoom')}`;
+  const locationText = `${localisation.floor !== null && localisation.floor !== undefined ? `${t('common.floor')} ${localisation.floor}` : t('equipment.noFloor')
+    } - ${localisation.room || t('equipment.noRoom')}`;
 
-  const statusClass = isAvailableStatus(equipment.status) ? 'ok' : 'busy';
+  let statusClass = 'warning';
+  if (isAvailableStatus(equipment.status)) statusClass = 'ok';
+  else if (isBrokenStatus(equipment.status)) statusClass = 'busy';
 
   return (
     <main className="page-pad equipment-page">
       <div className="container">
-        <div className="equip-topbar">
-          <button className="icon-btn" onClick={() => navigate(-1)}>
-            <i className="fa-solid fa-arrow-left" />
-          </button>
-          <div>
-            <h1 className="section-title">{t('equipment.title')}</h1>
-            <p className="subtitle">{t('equipment.subtitle')}</p>
+        <div className="equip-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <button className="icon-btn" onClick={() => navigate(-1)}>
+              <i className="fa-solid fa-arrow-left" />
+            </button>
+            <div>
+              <h1 className="section-title" style={{ margin: 0 }}>{t('equipment.title')}</h1>
+              <p className="subtitle" style={{ margin: 0 }}>{t('equipment.subtitle')}</p>
+            </div>
           </div>
+
+          {isAdmin && (
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={() => navigate(`/admin/equipment/${id}/edit`)}
+                style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <i className="fa-solid fa-pen"></i> Modifier
+              </button>
+              <button
+                onClick={async () => {
+                  if (window.confirm("Êtes-vous sûr de vouloir supprimer cet équipement définitivement ?")) {
+                    try {
+                      await api.delete(`/objets/${id}`);
+                      alert("Équipement supprimé");
+                      navigate(-1);
+                    } catch (err) {
+                      alert("Erreur lors de la suppression.");
+                    }
+                  }
+                }}
+                style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <i className="fa-solid fa-trash"></i> Supprimer
+              </button>
+            </div>
+          )}
         </div>
 
-        <section className="card equip-hero-card">
-          <div className="equip-hero-top">
-            <div>
-              <h2 className="equip-name">{equipment.name}</h2>
-              <p className="equip-subtype">{translateData('type', equipment.type) || '-'} - {equipment.marque || '-'}</p>
-            </div>
-            <span className={`badge ${statusClass}`}>{translateData('status', equipment.status)}</span>
+        <section className="card equip-hero-card" style={{ display: 'flex', flexDirection: 'row', gap: '24px', alignItems: 'center', padding: '24px' }}>
+
+          <div style={{ flexShrink: 0, width: '180px', height: '180px', backgroundColor: 'var(--surface-2)', borderRadius: '14px', border: '1px solid var(--border)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {equipment.url_photo ? (
+              <img
+                src={`http://127.0.0.1:8000${equipment.url_photo}`}
+                alt={equipment.name}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              <i className={`fa-solid ${getIcon(equipment.type)}`} style={{ fontSize: '64px', color: 'var(--primary)', opacity: 0.6 }}></i>
+            )}
           </div>
 
-          <div className="equip-meta-lines">
-            <div className="equip-meta-line">
-              <i className="fa-solid fa-location-dot" />
-              <span>{locationText}</span>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignSelf: 'stretch', justifyContent: 'space-between' }}>
+            <div className="equip-hero-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', padding: 0, border: 'none' }}>
+              <div>
+                <h2 className="equip-name" style={{ margin: '0 0 6px 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{equipment.name}</h2>
+                <p className="equip-subtype" style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem' }}>{translateData('type', equipment.type) || '-'} - {equipment.marque || '-'}</p>
+              </div>
+              <span className={`badge ${statusClass}`}>{translateData('status', equipment.status)}</span>
             </div>
-            <div className="equip-meta-line">
-              <i className="fa-regular fa-compass" />
-              <span>{formatDistance(equipment.distance_m, t, locale)}</span>
+
+            <div className="equip-meta-lines" style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 0 }}>
+              <div className="equip-meta-line" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-soft)', fontSize: '0.95rem' }}>
+                <i className="fa-solid fa-location-dot" style={{ color: 'var(--primary)', width: '16px', textAlign: 'center' }} />
+                <span>{locationText}</span>
+              </div>
+              <div className="equip-meta-line" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-soft)', fontSize: '0.95rem' }}>
+                <i className="fa-regular fa-compass" style={{ color: 'var(--primary)', width: '16px', textAlign: 'center' }} />
+                <span>{formatDistance(equipment.distance_m, t, locale)}</span>
+              </div>
+              {isAdmin && (
+                <>
+                  <div className="equip-meta-line" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-soft)', fontSize: '0.95rem' }}>
+                    <i className="fa-solid fa-microchip" style={{ color: 'var(--primary)', width: '16px', textAlign: 'center' }} />
+                    <span style={{ fontFamily: 'monospace' }}>MAC: {equipment.mac_adresse || 'N/A'}</span>
+                  </div>
+                  <div className="equip-meta-line" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: 'var(--text-soft)', fontSize: '0.95rem' }}>
+                    <i className="fa-solid fa-network-wired" style={{ color: 'var(--primary)', width: '16px', textAlign: 'center' }} />
+                    <span style={{ fontFamily: 'monospace' }}>IP: {equipment.ip_adress || 'Non assignée'}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </section>
@@ -241,8 +311,10 @@ const Equipment = () => {
                 {isBrokenStatus(equipment.status)
                   ? t('equipment.unavailable')
                   : actionLoading
-                  ? t('equipment.processing')
-                  : t('equipment.reserve')}
+                    ? t('equipment.processing')
+                    : normalizeStatus(equipment.status) === 'OCCUPÉ' || normalizeStatus(equipment.status) === 'RESERVÉ' || normalizeStatus(equipment.status) === 'RESERVED'
+                      ? t('equipment.joinQueue')
+                      : t('equipment.reserve')}
               </button>
             )}
 

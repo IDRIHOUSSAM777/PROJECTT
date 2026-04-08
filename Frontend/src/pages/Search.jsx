@@ -16,6 +16,7 @@ const filtersFromParams = (params) => ({
   salle: params.get('salle') || '',
   distance: parseBooleanParam(params.get('distance')),
   distance_max: params.get('distance_max') || '',
+  sort_by: params.get('sort_by') || '',
 });
 
 const buildParams = (query, filters, saveClick = false) => {
@@ -35,6 +36,7 @@ const buildParams = (query, filters, saveClick = false) => {
       urlParams.set('distance_max', String(filters.distance_max));
     }
   }
+  if (filters.sort_by) urlParams.set('sort_by', filters.sort_by);
 
   if (saveClick && value) {
     urlParams.set('save', '1');
@@ -53,6 +55,13 @@ const isAvailableStatus = (value) => {
   return lower.includes('disponible') || lower.includes('available');
 };
 
+const getStatusClass = (status) => {
+  const lower = String(status || '').toLowerCase();
+  if (lower.includes('disponible') || lower.includes('available')) return 'ok';
+  if (lower.includes('panne') || lower.includes('out of order') || lower.includes('aver')) return 'busy';
+  return 'warning';
+};
+
 const formatDistance = (value, t, locale) => {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return t('search.unknownDistance');
@@ -64,6 +73,16 @@ const formatDistance = (value, t, locale) => {
   }
 
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(value))} m`;
+};
+
+const getIcon = (typeObj) => {
+  const t = String(typeObj || '').toLowerCase();
+  if (t.includes('imp')) return 'fa-print';
+  if (t.includes('proj')) return 'fa-video';
+  if (t.includes('pc') || t.includes('ordinateur')) return 'fa-desktop';
+  if (t.includes('wifi') || t.includes('routeur')) return 'fa-wifi';
+  if (t.includes('contrôle') || t.includes('acces') || t.includes('accès')) return 'fa-id-badge';
+  return 'fa-cube';
 };
 
 const Search = () => {
@@ -84,6 +103,15 @@ const Search = () => {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1);
 
+  const [userPos, setUserPos] = useState(() => {
+    try {
+      const saved = localStorage.getItem('smartfind_user_pos');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [options, setOptions] = useState({
     types: [],
     marques: [],
@@ -97,7 +125,7 @@ const Search = () => {
     const q = (searchParams.get('q') || '').trim();
 
     const urlParams = new URLSearchParams();
-    const keys = ['q', 'type', 'marque', 'fonction', 'statut', 'etage', 'salle', 'distance', 'distance_max'];
+    const keys = ['q', 'type', 'marque', 'fonction', 'statut', 'etage', 'salle', 'distance', 'distance_max', 'sort_by'];
 
     keys.forEach((key) => {
       const val = searchParams.get(key);
@@ -108,6 +136,15 @@ const Search = () => {
 
     if (saveHistory && q) {
       urlParams.set('save_history', 'true');
+    }
+
+    // ALWAYS inject user details if available so backend computes precise distance_m
+    if (userPos) {
+      urlParams.set('user_x', userPos.x);
+      urlParams.set('user_y', userPos.y);
+      if (userPos.etage !== undefined && userPos.etage !== null) {
+        urlParams.set('user_etage', userPos.etage);
+      }
     }
 
     const url = urlParams.toString() ? `/search?${urlParams.toString()}` : '/search';
@@ -125,7 +162,7 @@ const Search = () => {
 
   useEffect(() => {
     api
-      .get('/search/filters')
+      .get('/search/filters?active_only=true')
       .then((res) => {
         const data = res.data || {};
         setOptions({
@@ -238,6 +275,19 @@ const Search = () => {
     return options.salles.filter((s) => String(s.num_etage) === String(filters.etage));
   }, [options.salles, filters.etage]);
 
+  const handleDistanceCheck = (checked) => {
+    if (checked) {
+      if (userPos) {
+        updateFilter('distance', true);
+      } else {
+        alert("📍 Vous devez d'abord définir votre position sur la Carte avant de pouvoir trier par distance.");
+        navigate('/map');
+      }
+    } else {
+      updateFilter('distance', false);
+    }
+  };
+
   const updateFilter = (name, value) => {
     setFilters((prev) => {
       const next = { ...prev, [name]: value };
@@ -267,6 +317,7 @@ const Search = () => {
       salle: '',
       distance: false,
       distance_max: '',
+      sort_by: '',
     });
   };
 
@@ -279,7 +330,28 @@ const Search = () => {
       setQuery(value);
     }
 
-    setParams(buildParams(value, filters, true));
+    const payload = {
+      query: value,
+      type: filters.type,
+      marque: filters.marque,
+      fonction: filters.fonction,
+      statut: filters.statut,
+      etage: filters.etage,
+      salle: filters.salle,
+      distance: filters.distance,
+      distance_max: filters.distance_max,
+      sort_by: filters.sort_by,
+      ...(filters.distance && userPos ? { user_x: userPos.x, user_y: userPos.y, user_etage: userPos.etage } : {})
+    };
+    console.log("🚀 Payload backend :", JSON.stringify(payload, null, 2));
+
+    const p = buildParams(value, filters, true);
+    if (filters.distance && userPos) {
+      p.set('user_x', userPos.x);
+      p.set('user_y', userPos.y);
+      if (userPos.etage) p.set('user_etage', userPos.etage);
+    }
+    setParams(p);
   };
 
   const clickSearch = () => {
@@ -481,13 +553,26 @@ const Search = () => {
                 </select>
               </label>
 
-              <label className="filter-field filter-switch">
-                <span>{t('search.distanceSort')}</span>
-                <input
-                  type="checkbox"
-                  checked={filters.distance}
-                  onChange={(e) => updateFilter('distance', e.target.checked)}
-                />
+              <label className="filter-field filter-switch" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', justifyContent: 'space-between' }}>
+                  <span>{t('search.distanceSort')} (proche → loin)</span>
+                  <input
+                    type="checkbox"
+                    checked={filters.distance}
+                    onChange={(e) => handleDistanceCheck(e.target.checked)}
+                  />
+                </div>
+                {filters.distance && userPos && (
+                  <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '4px' }}>
+                    📍 Position ({Math.round(userPos.x)}, {Math.round(userPos.y)})
+                    <span
+                      style={{ textDecoration: 'underline', cursor: 'pointer', marginLeft: '8px' }}
+                      onClick={() => setShowMapModal(true)}
+                    >
+                      Modifier
+                    </span>
+                  </div>
+                )}
               </label>
 
               <label className="filter-field">
@@ -504,11 +589,37 @@ const Search = () => {
                 />
               </label>
             </div>
+
+            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+              <button className="btn" onClick={resetFilters}>{t('common.reset')}</button>
+              <button className="btn btn-primary" onClick={clickSearch}>Appliquer</button>
+            </div>
           </section>
         )}
 
-        <div className="found">
-          {loading ? t('search.searching') : `${results.length} ${t('search.results')}`}
+
+
+        <div className="found" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{loading ? t('search.searching') : `${results.length} ${t('search.results')}`}</span>
+
+          <div className="sort-by-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px', color: 'var(--text-soft)' }}>
+              {locale === 'ar' ? 'ترتيب حسب:' : locale === 'en' ? 'Sort by:' : locale === 'es' ? 'Ordenar por:' : 'Trier par :'}
+            </span>
+            <select
+              className="select"
+              style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '14px', minWidth: '150px' }}
+              value={filters.sort_by}
+              onChange={(e) => {
+                updateFilter('sort_by', e.target.value);
+                setParams(buildParams(query, { ...filters, sort_by: e.target.value }, false), { replace: true });
+              }}
+            >
+              <option value="">{locale === 'ar' ? 'الصلة (اقتراضي)' : locale === 'en' ? 'Relevance (Default)' : locale === 'es' ? 'Relevancia (Por defecto)' : 'Pertinence (Défaut)'}</option>
+              <option value="distance">{locale === 'ar' ? 'الأقرب' : locale === 'en' ? 'Nearest' : locale === 'es' ? 'Más cercano' : 'Le plus proche'}</option>
+              <option value="popularity">{locale === 'ar' ? 'الأكثر استخداماً' : locale === 'en' ? 'Most Used' : locale === 'es' ? 'Más usado' : 'Le plus utilisé'}</option>
+            </select>
+          </div>
         </div>
 
         <section className="results">
@@ -516,8 +627,21 @@ const Search = () => {
             const meta = getResultMeta(r);
 
             return (
-              <article key={r.id_objet} className="card res res-card" onClick={() => navigate(`/equipment/${r.id_objet}`)}>
-                <div className="res-main">
+              <article key={r.id_objet} className="card res res-card" onClick={() => navigate(`/equipment/${r.id_objet}`)} style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ flexShrink: 0 }}>
+                  {r.url_photo ? (
+                    <img
+                      src={`http://127.0.0.1:8000${r.url_photo}`}
+                      alt={r.nom_model}
+                      style={{ width: '90px', height: '90px', objectFit: 'cover', borderRadius: '10px', border: '1px solid var(--border)' }}
+                    />
+                  ) : (
+                    <div style={{ width: '90px', height: '90px', background: 'var(--surface-2)', borderRadius: '10px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                      <i className={`fa-solid ${getIcon(r.type_objet)}`} style={{ fontSize: '36px' }}></i>
+                    </div>
+                  )}
+                </div>
+                <div className="res-main" style={{ flex: 1 }}>
                   <div className="res-name">{r.nom_model}</div>
                   <div className="res-type-brand">{translateData('type', r.type_objet)} - {r.nom_marque}</div>
 
@@ -536,7 +660,7 @@ const Search = () => {
                 </div>
 
                 <div className="res-right">
-                  <span className={`badge ${isAvailableStatus(r.statut) ? 'ok' : 'busy'}`}>{translateData('status', r.statut)}</span>
+                  <span className={`badge ${getStatusClass(r.statut)}`}>{translateData('status', r.statut)}</span>
                   <span className="res-link">{t('search.viewDetails')} <i className="fa-solid fa-angle-right" /></span>
                 </div>
               </article>

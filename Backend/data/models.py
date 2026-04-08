@@ -1,7 +1,7 @@
 from sqlalchemy import Table, Column, Integer, String, ForeignKey, DateTime, Boolean, Float, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from database import Base
+from data.database import Base
 
 # 1. TABLE D'ASSOCIATION (Doit être définie avant son utilisation)
 association_objet_fonction = Table(
@@ -24,8 +24,10 @@ class Salle(Base):
     __tablename__ = "salles"
     id_salle = Column(Integer, primary_key=True, index=True)
     nom_salle = Column(String)
-    coord_x = Column(Float)
-    coord_y = Column(Float)
+    coord_x = Column(Float) # Position X du bord supérieur gauche
+    coord_y = Column(Float) # Position Y du bord supérieur gauche
+    largeur = Column(Float, default=20.0) # Largeur de la salle (en pourcentage ou mètres)
+    longueur = Column(Float, default=20.0) # Hauteur de la salle
     num_etage = Column(Integer, ForeignKey("etages.num_etage"), index=True) # Index jointure
     
     etage = relationship("Etage", back_populates="salles")
@@ -63,10 +65,11 @@ class Objet(Base):
     nom_marque = Column(String, index=True)
     type_objet = Column(String, index=True)
     description = Column(String, nullable=True)
-    
     # IoT & Réseau
     mac_adresse = Column(String, unique=True, index=True)
     ip_adress = Column(String, nullable=True)
+    pos_x = Column(Float, nullable=True)
+    pos_y = Column(Float, nullable=True)
     statut = Column(String, default="Disponible", index=True) # Disponible, Occupé, Panne
     last_heartbeat = Column(DateTime, default=datetime.utcnow)
     
@@ -102,6 +105,8 @@ class Utilisateur(Base):
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
     role = Column(String, default="Utilisateur") # "Utilisateur" ou "Admin"
+    est_verifie = Column(Boolean, default=False)
+    code_verification = Column(String, nullable=True)
 
     reservations = relationship("Reservation", back_populates="utilisateur")
     historiques = relationship("Historique", back_populates="utilisateur")
@@ -141,3 +146,5 @@ class Notification(Base):
     id_reservation = Column(Integer, ForeignKey("reservations.id"), nullable=True, index=True)
 
     utilisateur = relationship("Utilisateur", back_populates="notifications")
+
+

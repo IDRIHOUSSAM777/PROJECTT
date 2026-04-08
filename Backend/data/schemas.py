@@ -23,18 +23,29 @@ class ObjetBase(BaseModel):
 
 class ObjetCreate(ObjetBase):
     id_salle: int
+    ip_adress: Optional[str] = None
+    pos_x: Optional[float] = None
+    pos_y: Optional[float] = None
+    description: Optional[str] = None
     fonctionnalites: List[str] = [] # Liste de noms (ex: ["Wifi", "Scanner"])
 
 class ObjetUpdate(BaseModel):
     nom_model: Optional[str] = None
     statut: Optional[str] = None
     description: Optional[str] = None
-    # On permet la modification partielle
+    nom_marque: Optional[str] = None
+    type_objet: Optional[str] = None
+    mac_adresse: Optional[str] = None
+    ip_adress: Optional[str] = None
+    id_salle: Optional[int] = None
+    fonctionnalites: Optional[List[str]] = None
 
 class ObjetResponse(ObjetBase):
     id_objet: int
     id_salle: Optional[int]
     ip_adress: Optional[str]
+    pos_x: Optional[float]
+    pos_y: Optional[float]
     statut: str
     url_photo: Optional[str]
     fonctionnalites: List[FonctionnaliteBase] = [] # Objets complets
@@ -52,6 +63,10 @@ class UserCreate(BaseModel):
     password: str
     nom: str
     prenom: str
+
+class VerifyEmailRequest(BaseModel):
+    email: str
+    code: str
 
 class UserUpdate(BaseModel):
     nom: Optional[str] = None
@@ -129,9 +144,12 @@ class EquipmentDetailsResponse(BaseModel):
     type: Optional[str] = None
     marque: Optional[str] = None
     status: str
+    mac_adresse: Optional[str] = None
+    ip_adress: Optional[str] = None
     localisation: EquipmentLocation
     distance_m: Optional[float] = None
     description: Optional[str] = None
+    url_photo: Optional[str] = None
     fonctionnalites: List[str] = []
 
     queue_count: int = 0
@@ -180,3 +198,4 @@ class NotificationListResponse(BaseModel):
 class NotificationUpdateResponse(BaseModel):
     message: str
     unread_count: int
+

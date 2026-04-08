@@ -5,8 +5,8 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from database import get_db
-import models
+from data.database import get_db
+from data import models
 
 # Configuration (A mettre dans un fichier .env en production)
 SECRET_KEY = "ta_cle_secrete_super_longue_et_aleatoire"
@@ -74,3 +74,8 @@ async def get_current_user_optional(
         
     user = db.query(models.Utilisateur).filter(models.Utilisateur.email == email).first()
     return user
+
+def get_current_admin(current_user: models.Utilisateur = Depends(get_current_user)):
+    if current_user.role != "Admin":
+        raise HTTPException(status_code=403, detail="Privilèges Administrateur requis")
+    return current_user

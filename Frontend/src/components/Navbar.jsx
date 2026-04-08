@@ -26,6 +26,12 @@ const notificationTypeLabel = (type, language) => {
     if (language === 'ar') return 'حجز';
     return 'Réservation';
   }
+  if (normalized === 'PANNE_ALERTE' || normalized === 'PANNE_IOT') {
+    if (language === 'en') return 'Breakdown Alert';
+    if (language === 'es') return 'Alerta de avería';
+    if (language === 'ar') return 'تنبيه عطل';
+    return 'Alerte Panne';
+  }
   if (normalized === 'ALERT') {
     if (language === 'en') return 'Alert';
     if (language === 'es') return 'Alerta';
@@ -81,9 +87,7 @@ const Navbar = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [notifLoading, setNotifLoading] = useState(false);
-  const notifRef = useRef(null);
   const token = localStorage.getItem('access_token');
 
   const fetchNotifications = useCallback(async () => {
@@ -123,16 +127,6 @@ const Navbar = () => {
   }, [token, fetchNotifications]);
 
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isNotifOpen && notifRef.current && !notifRef.current.contains(event.target)) {
-        setIsNotifOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isNotifOpen]);
-
-  useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme === 'dark') {
       setIsDarkMode(true);
@@ -170,46 +164,6 @@ const Navbar = () => {
     navigate('/login');
   };
 
-  const handleToggleNotifications = async () => {
-    const nextOpen = !isNotifOpen;
-    setIsNotifOpen(nextOpen);
-    if (nextOpen) await fetchNotifications();
-  };
-
-  const handleOpenNotification = async (notification) => {
-    if (!notification) return;
-    if (!notification.est_lu) {
-      try {
-        const res = await api.post(`/users/me/notifications/${notification.id_notification}/read`);
-        const unread = Number(res?.data?.unread_count);
-        setUnreadCount(Number.isFinite(unread) ? unread : 0);
-        setNotifications((prev) =>
-          prev.map((item) =>
-            item.id_notification === notification.id_notification
-              ? { ...item, est_lu: true }
-              : item
-          )
-        );
-      } catch {
-        // keep UI usable
-      }
-    }
-    if (notification.id_objet) {
-      setIsNotifOpen(false);
-      navigate(`/equipment/${notification.id_objet}`);
-    }
-  };
-
-  const handleMarkAllNotificationsRead = async () => {
-    try {
-      await api.post('/users/me/notifications/read-all');
-      setUnreadCount(0);
-      setNotifications((prev) => prev.map((item) => ({ ...item, est_lu: true })));
-    } catch {
-      // ignore
-    }
-  };
-
   const firstName = user?.prenom || '';
   const lastName = user?.nom || '';
   const fullName = `${firstName} ${lastName}`.trim() || translateData('role', 'Utilisateur');
@@ -245,12 +199,8 @@ const Navbar = () => {
           <i className="fa-regular fa-clock" />
           <span>{t('nav.history')}</span>
         </Link>
-        <Link className={`nav-item ${isActive('/profile')}`} to="/profile">
-          <i className="fa-regular fa-user" />
-          <span>{t('nav.profile')}</span>
-        </Link>
         {String(user?.role || '').toLowerCase() === 'admin' && (
-          <Link className={`nav-item ${isActive(['/admin/alerts', '/admin/inventory'])}`} to="/admin/alerts">
+          <Link className={`nav-item ${isActive(['/admin', '/admin/inventory'])}`} to="/admin">
             <i className="fa-solid fa-shield-halved" />
             <span>{t('nav.admin')}</span>
           </Link>
@@ -272,51 +222,22 @@ const Navbar = () => {
           <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} />
         </button>
 
-        <div className="notif-wrap" ref={notifRef}>
+        <div className="notif-wrap">
           <button
-            className={`icon-btn notif-btn ${isNotifOpen ? 'open' : ''}`}
-            onClick={handleToggleNotifications}
+            className={`icon-btn notif-btn ${isActive('/notifications')}`}
+            onClick={() => {
+              navigate('/notifications');
+              fetchNotifications(); // Refresh badge on click
+            }}
             aria-label={t('nav.notifications')}
             title={t('nav.notifications')}
           >
             <i className="fa-regular fa-bell" />
             {unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
           </button>
-
-          {isNotifOpen && (
-            <div className="notif-pop card">
-              <div className="notif-head">
-                <strong>{t('nav.notifications')}</strong>
-                {unreadCount > 0 && (
-                  <button type="button" className="notif-read-all" onClick={handleMarkAllNotificationsRead}>
-                    {t('nav.markAllRead')}
-                  </button>
-                )}
-              </div>
-
-              <div className="notif-body">
-                {notifLoading && notifications.length === 0 && <div className="notif-empty">{t('nav.loading')}</div>}
-                {!notifLoading && notifications.length === 0 && <div className="notif-empty">{t('nav.noNotifications')}</div>}
-                {notifications.map((notification) => (
-                  <button
-                    type="button"
-                    key={notification.id_notification}
-                    className={`notif-item ${notification.est_lu ? '' : 'unread'}`}
-                    onClick={() => handleOpenNotification(notification)}
-                  >
-                    <div className="notif-item-top">
-                      <span className="notif-type">{notificationTypeLabel(notification.type_notification, language)}</span>
-                      <span className="notif-time">{formatRelativeTime(notification.date_notification, language)}</span>
-                    </div>
-                    <span className="notif-message">{notification.message}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
-        <div className="avatar" onClick={() => navigate('/profile')} title={t('nav.myProfile')}>
+        <div className="avatar" onClick={() => navigate('/profile')} title={t('nav.myProfile')} style={{ cursor: 'pointer' }}>
           {initials}
         </div>
 
