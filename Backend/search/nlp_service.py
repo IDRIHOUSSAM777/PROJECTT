@@ -11,7 +11,13 @@ except Exception:
 
 try:
     from rapidfuzz import fuzz, process
+    try:
+        from rapidfuzz.distance import JaroWinkler as _JaroWinkler  # noqa: F401
+        _HAS_JARO = True
+    except Exception:
+        _HAS_JARO = False
 except Exception:
+    _HAS_JARO = False
 
     class _FuzzFallback:
         @classmethod
@@ -70,6 +76,7 @@ import json
 import os
 from sqlalchemy.orm import Session
 from data import models
+from search.phonetic import phonetic_key, phonetic_match
 
 # Load NLP settings from external config file
 NLP_RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "nlp_rules.json")
@@ -87,6 +94,8 @@ TYPE_INTENT_PATTERNS = {
     for k, v in nlp_rules.get("TYPE_INTENT_PATTERNS", {}).items()
 }
 NOISE_TERMS = set(nlp_rules.get("NOISE_TERMS", []))
+LANGUAGE_SYNONYMS: Dict[str, List[str]] = nlp_rules.get("LANGUAGE_SYNONYMS", {})
+FEATURE_SYNONYMS: Dict[str, List[str]] = nlp_rules.get("FEATURE_SYNONYMS", {})
 
 STATUS_KEYWORDS = {
     "Disponible": {"disponible", "dispo", "libre", "available", "free", "ready", "متاح", "فارغ"},
@@ -100,14 +109,48 @@ REGEX_ROOM = re.compile(r"(?:salle|room|قاعة|غرفة)\s*([\w\-]+)", re.IGNO
 REGEX_IP = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
 REGEX_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
 
+REGEX_ARABIC = re.compile(r"[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]")
+
+ARABIC_NORMALIZE_MAP = {
+    "أ": "ا", "إ": "ا", "آ": "ا", "ٱ": "ا",
+    "ى": "ي", "ئ": "ي",
+    "ؤ": "و",
+    "ة": "ه",
+    "ـ": "",
+}
+ARABIC_DIACRITICS_RE = re.compile(r"[\u064B-\u0652\u0670\u0640]")
+
+
+def normalize_arabic(value: str) -> str:
+    """Normalise les variantes d'Alif, Ya, Ta Marbouta, supprime tatweel et diacritiques."""
+    if not value:
+        return value
+    value = ARABIC_DIACRITICS_RE.sub("", value)
+    return "".join(ARABIC_NORMALIZE_MAP.get(c, c) for c in value)
+
+
+def detect_language(value: Optional[str]) -> str:
+    """Retourne 'ar', 'latin' ou 'mixed' selon la composition du texte."""
+    if not value:
+        return "latin"
+    arabic_chars = len(REGEX_ARABIC.findall(value))
+    latin_chars = sum(1 for c in value if "a" <= c.lower() <= "z")
+    if arabic_chars and latin_chars:
+        return "mixed"
+    if arabic_chars:
+        return "ar"
+    return "latin"
+
 
 def normalize_text(value: Optional[str]) -> str:
     if not value: return ""
-    stripped = "".join(c for c in unicodedata.normalize("NFKD", str(value)) if not unicodedata.combining(c))
-    return stripped.lower().strip()
+    text = normalize_arabic(str(value))
+    stripped = "".join(c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c))
+    collapsed = re.sub(r"\s+", " ", stripped)
+    return collapsed.lower().strip()
 
 def split_words(value: str) -> List[str]:
-    return [w for w in re.findall(r"[a-z0-9؀-ۿ]+", normalize_text(value), flags=re.UNICODE) if w]
+    return [w for w in re.findall(r"[a-z0-9\u0600-\u06FF]+", normalize_text(value), flags=re.UNICODE) if w]
 
 def clean_noise_terms(terms: List[str]) -> List[str]:
     cleaned = []
@@ -137,6 +180,30 @@ class NLPParser:
                 self.type_alias_to_canonical[normalize_text(alias)] = canonical
 
         self.intent_patterns = TYPE_INTENT_PATTERNS
+
+        # Multilingual reverse index: every translation → canonical (French) form.
+        # LANGUAGE_SYNONYMS["imprimante"] = ["printer", "طابعة", "impresora", ...]
+        self.multilingual_to_canonical: Dict[str, str] = {}
+        self.canonical_to_translations: Dict[str, List[str]] = {}
+        for canonical, variants in LANGUAGE_SYNONYMS.items():
+            canon_norm = normalize_text(canonical)
+            if not canon_norm:
+                continue
+            translations = []
+            for variant in [canonical, *variants]:
+                v_norm = normalize_text(variant)
+                if not v_norm:
+                    continue
+                self.multilingual_to_canonical.setdefault(v_norm, canon_norm)
+                if v_norm not in translations:
+                    translations.append(v_norm)
+            self.canonical_to_translations[canon_norm] = translations
+
+        self.feature_synonyms: Dict[str, List[str]] = {
+            normalize_text(k): [normalize_text(v) for v in variants if normalize_text(v)]
+            for k, variants in FEATURE_SYNONYMS.items()
+            if normalize_text(k)
+        }
         self._vocab_cache_at = 0.0
         self._vocab_cache_terms: List[str] = []
         
@@ -280,7 +347,8 @@ class NLPParser:
             if not n_term or n_term in NOISE_TERMS: continue
             if n_term in norm_map: return norm_map[n_term]
             if n_term.isdigit() or len(n_term) < 3: continue
-            best = process.extractOne(n_term, list(norm_map.keys()), scorer=fuzz.WRatio, score_cutoff=score_cutoff)
+            scorer_func = getattr(fuzz, 'ratio', getattr(fuzz, '_ratio', fuzz.WRatio))
+            best = process.extractOne(n_term, list(norm_map.keys()), scorer=scorer_func, score_cutoff=score_cutoff)
             if best and float(best[1]) > best_score:
                 best_score = float(best[1])
                 best_value = norm_map.get(best[0])
@@ -348,16 +416,41 @@ class NLPParser:
 
         return filters, cleaned_terms
 
+    @staticmethod
+    def fuzzy_score(a: str, b: str, **_kwargs) -> float:
+        """
+        Score de similarité [0, 100] combinant plusieurs algorithmes :
+          - WRatio (ratio + partial + token_set, robuste mais généraliste)
+          - Jaro-Winkler (avantage aux préfixes identiques — les fautes portent
+            rarement sur la première lettre)
+          - Bonus phonétique (+12) si les deux chaînes partagent la même empreinte.
+
+        La combinaison maximale est retournée, offrant ainsi une tolérance
+        meilleure que n'importe quel algorithme isolé.
+        """
+        if not a or not b:
+            return 0.0
+        base = float(fuzz.WRatio(a, b))
+        if _HAS_JARO:
+            try:
+                jw = float(_JaroWinkler.normalized_similarity(a, b)) * 100.0
+                base = max(base, jw)
+            except Exception:
+                pass
+        if phonetic_match(a, b):
+            base = min(100.0, base + 12.0)
+        return base
+
     def is_safe_autocorrect(self, source: str, candidate: str, score: float) -> bool:
         if not source or not candidate: return False
         if source == candidate: return True
         if len(source) < 3 or len(candidate) < 3 or source[0] != candidate[0]: return False
         len_diff = abs(len(source) - len(candidate))
-        if len(source) <= 4: min_score, max_diff = 88.0, 1
-        elif len(source) <= 6: min_score, max_diff = 82.0, 2
-        else: min_score, max_diff = 78.0, 4
+        if len(source) <= 3: min_score, max_diff = 88.0, 4
+        elif len(source) <= 6: min_score, max_diff = 80.0, 4
+        else: min_score, max_diff = 75.0, 5
         if score < min_score or len_diff > max_diff: return False
-        return SequenceMatcher(None, source, candidate).ratio() >= 0.62
+        return True
 
     def autocorrect_terms(self, terms: List[str], vocabulary: List[str]) -> Tuple[List[str], Dict[str, str]]:
         if not terms or not vocabulary: return terms, {}
@@ -369,17 +462,61 @@ class NLPParser:
             if norm in NOISE_TERMS or norm.isdigit() or len(norm) < 3 or norm in vocabulary:
                 corrected.append(norm)
                 continue
-            best = process.extractOne(norm, vocabulary, scorer=fuzz.WRatio, score_cutoff=82)
+            # 1. Cross-language direct translation (ex: "printer" -> "imprimante", "طابعة" -> "imprimante")
+            canonical = self.multilingual_to_canonical.get(norm)
+            if canonical and canonical != norm:
+                corrections[norm] = canonical
+                corrected.append(canonical)
+                continue
+            # 2. Fuzzy typo correction against domain vocabulary (ex: "emprimante" -> "imprimante")
+            best = process.extractOne(norm, vocabulary, scorer=self.fuzzy_score, score_cutoff=80)
             if best:
                 candidate = normalize_text(best[0])
                 if self.is_safe_autocorrect(norm, candidate, float(best[1] or 0.0)):
                     corrections[norm] = candidate
                     corrected.append(candidate)
                     continue
+            # 3. Fuzzy translation (ex: "printr" -> "printer" -> "imprimante")
+            translated = self.translate_to_canonical(norm)
+            if translated and translated != norm:
+                corrections[norm] = translated
+                corrected.append(translated)
+                continue
+            # 4. Phonetic fallback (ex: "projeckteur" -> "projecteur")
+            # Cas typique où Levenshtein rejette (>4 éd.) mais le son est identique.
+            src_key = phonetic_key(norm)
+            if src_key:
+                for vocab_term in vocabulary:
+                    if phonetic_key(vocab_term) == src_key and len(vocab_term) >= 4:
+                        corrections[norm] = vocab_term
+                        corrected.append(vocab_term)
+                        break
+                else:
+                    corrected.append(norm)
+                continue
             corrected.append(norm)
         return corrected, corrections
 
+    def translate_to_canonical(self, term: str) -> Optional[str]:
+        """Retourne la forme canonique FR d'un terme quelle que soit sa langue (FR/EN/AR/ES)."""
+        if not term:
+            return None
+        n = normalize_text(term)
+        if not n:
+            return None
+        if n in self.multilingual_to_canonical:
+            return self.multilingual_to_canonical[n]
+        # Fuzzy fallback across the multilingual vocabulary
+        keys = list(self.multilingual_to_canonical.keys())
+        if not keys:
+            return None
+        best = process.extractOne(n, keys, scorer=fuzz.WRatio, score_cutoff=85)
+        if best:
+            return self.multilingual_to_canonical.get(best[0])
+        return None
+
     def expand_terms(self, terms: List[str]) -> List[str]:
+        """Ajoute à chaque terme: sa canonique de type, ses traductions multilingues, et ses synonymes de feature."""
         expanded = []
         seen = set()
         def push(val):
@@ -388,6 +525,21 @@ class NLPParser:
                 seen.add(n)
                 expanded.append(n)
         for term in terms:
-            push(term)
-            if canonical := self.type_alias_to_canonical.get(normalize_text(term)): push(canonical)
+            n_term = normalize_text(term)
+            push(n_term)
+            if canonical := self.type_alias_to_canonical.get(n_term):
+                push(canonical)
+            # Multilingual expansion: translate to canonical FR and add every language variant
+            canonical_lang = self.multilingual_to_canonical.get(n_term) or self.translate_to_canonical(n_term)
+            if canonical_lang:
+                push(canonical_lang)
+                for sibling in self.canonical_to_translations.get(canonical_lang, []):
+                    push(sibling)
+            # Feature synonyms (recto-verso, couleur, wifi, ...)
+            for feature, variants in self.feature_synonyms.items():
+                if n_term == feature or n_term in variants:
+                    push(feature)
+                    for v in variants:
+                        push(v)
+                    break
         return expanded

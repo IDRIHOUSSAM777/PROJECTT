@@ -12,36 +12,6 @@ const parseBackendDate = (value) => {
   return parsed;
 };
 
-const notificationTypeLabel = (type, language) => {
-  const normalized = String(type || '').toUpperCase();
-  if (normalized === 'TURN_READY') {
-    if (language === 'en') return 'Your turn';
-    if (language === 'es') return 'Tu turno';
-    if (language === 'ar') return 'حان دورك';
-    return 'Votre tour';
-  }
-  if (normalized === 'RESERVATION') {
-    if (language === 'en') return 'Reservation';
-    if (language === 'es') return 'Reserva';
-    if (language === 'ar') return 'حجز';
-    return 'Réservation';
-  }
-  if (normalized === 'PANNE_ALERTE' || normalized === 'PANNE_IOT') {
-    if (language === 'en') return 'Breakdown Alert';
-    if (language === 'es') return 'Alerta de avería';
-    if (language === 'ar') return 'تنبيه عطل';
-    return 'Alerte Panne';
-  }
-  if (normalized === 'ALERT') {
-    if (language === 'en') return 'Alert';
-    if (language === 'es') return 'Alerta';
-    if (language === 'ar') return 'تنبيه';
-    return 'Alerte';
-  }
-  if (language === 'ar') return 'معلومة';
-  return 'Info';
-};
-
 const formatRelativeTime = (value, language) => {
   const parsed = parseBackendDate(value);
   if (!parsed) return '';
@@ -85,27 +55,7 @@ const Navbar = () => {
 
   const [user, setUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [notifLoading, setNotifLoading] = useState(false);
   const token = localStorage.getItem('access_token');
-
-  const fetchNotifications = useCallback(async () => {
-    if (!token) return;
-    setNotifLoading(true);
-    try {
-      const res = await api.get('/users/me/notifications?limit=12');
-      const items = Array.isArray(res?.data?.items) ? res.data.items : [];
-      const unread = Number(res?.data?.unread_count);
-      setNotifications(items);
-      setUnreadCount(Number.isFinite(unread) ? unread : 0);
-    } catch {
-      setNotifications([]);
-      setUnreadCount(0);
-    } finally {
-      setNotifLoading(false);
-    }
-  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -113,18 +63,9 @@ const Navbar = () => {
       .then((res) => setUser(res.data))
       .catch(() => {
         localStorage.removeItem('access_token');
-        setNotifications([]);
-        setUnreadCount(0);
         navigate('/login');
       });
   }, [token, navigate]);
-
-  useEffect(() => {
-    if (!token) return undefined;
-    fetchNotifications();
-    const timer = window.setInterval(fetchNotifications, 30000);
-    return () => window.clearInterval(timer);
-  }, [token, fetchNotifications]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -159,15 +100,13 @@ const Navbar = () => {
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
-    setNotifications([]);
-    setUnreadCount(0);
     navigate('/login');
   };
 
   const firstName = user?.prenom || '';
   const lastName = user?.nom || '';
   const fullName = `${firstName} ${lastName}`.trim() || translateData('role', 'Utilisateur');
-  const roleLabel = translateData('role', user?.role || 'Utilisateur');
+  const roleLabel = translateData('role', user?.email === 'admin@smartfind.com' ? 'Admin' : 'Utilisateur');
   const initials = `${firstName[0] || ''}${lastName[0] || ''}`.toUpperCase() || 'U';
 
   return (
@@ -195,11 +134,19 @@ const Navbar = () => {
           <i className="fa-solid fa-table-cells-large" />
           <span>{t('nav.categories')}</span>
         </Link>
-        <Link className={`nav-item ${isActive('/history')}`} to="/history">
-          <i className="fa-regular fa-clock" />
-          <span>{t('nav.history')}</span>
-        </Link>
-        {String(user?.role || '').toLowerCase() === 'admin' && (
+        {user?.email !== 'admin@smartfind.com' && (
+          <Link className={`nav-item ${isActive('/favorites')}`} to="/favorites">
+            <i className="fa-solid fa-star" />
+            <span>{t('nav.favorites')}</span>
+          </Link>
+        )}
+        {user?.email !== 'admin@smartfind.com' && (
+          <Link className={`nav-item ${isActive('/history')}`} to="/history">
+            <i className="fa-regular fa-clock" />
+            <span>{t('nav.history')}</span>
+          </Link>
+        )}
+        {user?.email === 'admin@smartfind.com' && (
           <Link className={`nav-item ${isActive(['/admin', '/admin/inventory'])}`} to="/admin">
             <i className="fa-solid fa-shield-halved" />
             <span>{t('nav.admin')}</span>
@@ -221,22 +168,6 @@ const Navbar = () => {
         >
           <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'}`} />
         </button>
-
-        <div className="notif-wrap">
-          <button
-            className={`icon-btn notif-btn ${isActive('/notifications')}`}
-            onClick={() => {
-              navigate('/notifications');
-              fetchNotifications(); // Refresh badge on click
-            }}
-            aria-label={t('nav.notifications')}
-            title={t('nav.notifications')}
-          >
-            <i className="fa-regular fa-bell" />
-            {unreadCount > 0 && <span className="notif-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>}
-          </button>
-        </div>
-
         <div className="avatar" onClick={() => navigate('/profile')} title={t('nav.myProfile')} style={{ cursor: 'pointer' }}>
           {initials}
         </div>

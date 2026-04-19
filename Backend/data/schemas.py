@@ -38,7 +38,11 @@ class ObjetUpdate(BaseModel):
     mac_adresse: Optional[str] = None
     ip_adress: Optional[str] = None
     id_salle: Optional[int] = None
+    pos_x: Optional[float] = None
+    pos_y: Optional[float] = None
     fonctionnalites: Optional[List[str]] = None
+    supports_wol: Optional[bool] = None
+    power_state: Optional[str] = None
 
 class ObjetResponse(ObjetBase):
     id_objet: int
@@ -48,14 +52,25 @@ class ObjetResponse(ObjetBase):
     pos_y: Optional[float]
     statut: str
     url_photo: Optional[str]
+    date_integration: Optional[datetime] = None
     fonctionnalites: List[FonctionnaliteBase] = [] # Objets complets
     distance_m: Optional[float] = None
     waiting_count: int = 0
     popularity_score: Optional[float] = None
     relevance_score: Optional[float] = None
+    supports_wol: bool = False
+    power_state: str = "unknown"
+    last_wake_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class WakeResponse(BaseModel):
+    message: str
+    mac_adresse: str
+    power_state: str
+    triggered_at: datetime
 
 # --- Utilisateurs ---
 class UserCreate(BaseModel):
@@ -68,6 +83,17 @@ class VerifyEmailRequest(BaseModel):
     email: str
     code: str
 
+class ResendOTPRequest(BaseModel):
+    email: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
 class UserUpdate(BaseModel):
     nom: Optional[str] = None
     prenom: Optional[str] = None
@@ -79,7 +105,6 @@ class UserResponse(BaseModel):
     email: str
     nom: str
     prenom: str
-    role: str # Important pour le frontend
     
     class Config:
         from_attributes = True
@@ -88,14 +113,7 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
-# --- Réservation & Historique ---
-class ReservationResponse(BaseModel):
-    id: int
-    date_reservation: datetime
-    statut_reservation: str
-    objet: ObjetResponse # On imbrique l'objet pour l'affichage
-    class Config:
-        from_attributes = True
+# --- Historique ---
 
 
 # --- Alertes ---
@@ -112,13 +130,15 @@ class AlerteResponse(BaseModel):
     est_resolu: bool
     
     # Pour afficher les noms au lieu des ID (Plus lisible)
-    nom_objet: str 
-    nom_signaleur: Optional[str] = "Système IoT" 
+    nom_objet: str
+    nom_signaleur: Optional[str] = "Système IoT"
+    id_objet: Optional[int] = None
 
     class Config:
         from_attributes = True
 
 class HistoriqueResponse(BaseModel):
+    id_historique: int
     date_his: datetime
     requete_search: str
     class Config:
@@ -140,9 +160,16 @@ class EquipmentLocation(BaseModel):
 
 class EquipmentDetailsResponse(BaseModel):
     id: int
-    name: str
-    type: Optional[str] = None
-    marque: Optional[str] = None
+    name: str # Aliased for Equipment.jsx
+    type: Optional[str] = None # Aliased for Equipment.jsx
+    marque: Optional[str] = None # Aliased for Equipment.jsx
+    
+    # Old field names for compatibility (EditEquipment.jsx, etc.)
+    nom_model: str 
+    type_objet: str
+    nom_marque: str
+    id_salle: Optional[int] = None
+    
     status: str
     mac_adresse: Optional[str] = None
     ip_adress: Optional[str] = None
@@ -150,52 +177,25 @@ class EquipmentDetailsResponse(BaseModel):
     distance_m: Optional[float] = None
     description: Optional[str] = None
     url_photo: Optional[str] = None
+    date_integration: Optional[datetime] = None
     fonctionnalites: List[str] = []
-
-    queue_count: int = 0
-    active_reservation_id: Optional[int] = None
-    my_reservation_id: Optional[int] = None
-    my_reservation_status: Optional[str] = None
-
-
-class QueueInfoResponse(BaseModel):
-    object_id: int
-    waiting_count: int
-    active_reservation_id: Optional[int] = None
-
-
-class ReservationCreateRequest(BaseModel):
-    object_id: int
-    user_id: Optional[int] = None
-
-
-class ReservationActionResponse(BaseModel):
-    message: str
-    reservation_id: Optional[int] = None
-    reservation_status: Optional[str] = None
-    queue_count: int = 0
-    object_status: Optional[str] = None
-
-
-class NotificationResponse(BaseModel):
-    id_notification: int
-    message: str
-    type_notification: str
-    est_lu: bool
-    date_notification: datetime
-    id_objet: Optional[int] = None
-    id_reservation: Optional[int] = None
+    supports_wol: bool = False
+    power_state: str = "unknown"
+    last_wake_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 
-class NotificationListResponse(BaseModel):
-    items: List[NotificationResponse]
-    unread_count: int
+# --- Favoris ---
+class FavoriResponse(BaseModel):
+    id_objet: int
+    nom_model: str
+    nom_marque: Optional[str] = None
+    type_objet: Optional[str] = None
+    statut: str
+    url_photo: Optional[str] = None
+    date_ajout: datetime
 
-
-class NotificationUpdateResponse(BaseModel):
-    message: str
-    unread_count: int
-
+    class Config:
+        from_attributes = True

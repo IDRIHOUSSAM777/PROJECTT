@@ -42,10 +42,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
+        
+    if email == "admin@smartfind.com":
+        # On utilise un objet fictif pour l'admin (id=0), il n'existe pas en BDD
+        return models.Utilisateur(id_utilisateur=0, email="admin@smartfind.com", nom="System", prenom="Admin")
+        
     user = db.query(models.Utilisateur).filter(models.Utilisateur.email == email).first()
     if user is None:
         raise credentials_exception
+            
     return user
 
 
@@ -72,10 +77,13 @@ async def get_current_user_optional(
     except JWTError:
         return None
         
+    if email == "admin@smartfind.com":
+        return models.Utilisateur(id_utilisateur=0, email="admin@smartfind.com", nom="System", prenom="Admin")
+        
     user = db.query(models.Utilisateur).filter(models.Utilisateur.email == email).first()
     return user
 
 def get_current_admin(current_user: models.Utilisateur = Depends(get_current_user)):
-    if current_user.role != "Admin":
+    if current_user.email != "admin@smartfind.com":
         raise HTTPException(status_code=403, detail="Privilèges Administrateur requis")
     return current_user

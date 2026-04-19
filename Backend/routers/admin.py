@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
 from datetime import datetime, timedelta
 from data.database import get_db
-from data.models import Objet, Utilisateur, Alerte, Reservation, Salle
+from data.models import Objet, Utilisateur, Salle, Favori, Alerte
 
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 
@@ -18,7 +18,7 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     stats_dict = {s[0]: s[1] for s in status_counts}
     
     available_count = sum(v for k, v in stats_dict.items() if "disponible" in str(k).lower())
-    occupied_count = sum(v for k, v in stats_dict.items() if "occup" in str(k).lower() or "reserv" in str(k).lower())
+    occupied_count = sum(v for k, v in stats_dict.items() if "occup" in str(k).lower())
     broken_count = sum(v for k, v in stats_dict.items() if "panne" in str(k).lower() or "error" in str(k).lower())
     
     # Graphes : Objets par salle (Toutes les salles, même vides)
@@ -37,55 +37,71 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     if unassigned > 0:
         room_stats.append({"salle": "Non assigné", "etage": "-", "count": unassigned})
     
-    # Événements : Alertes non résolues
-    active_alerts = db.query(Alerte).filter(Alerte.est_resolu == False).order_by(Alerte.date_alerte.desc()).limit(5).all()
-    
-    # Événements : 5 Dernières Réservations
-    recent_reservations = (
-        db.query(Reservation, Utilisateur.nom, Utilisateur.prenom, Objet.nom_model)
-        .join(Utilisateur, Reservation.id_utilisateur == Utilisateur.id_utilisateur)
-        .join(Objet, Reservation.id_objet == Objet.id_objet)
-        .order_by(Reservation.date_reservation.desc())
-        .limit(5)
-        .all()
-    )
-
     # Récupération détaillée pour les modales du dashboard
     all_users = db.query(Utilisateur).all()
     all_objects = db.query(Objet).all()
 
-    # Top 10 Mensuel : Équipements les plus réservés (30 derniers jours)
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
-    top_10 = (
-        db.query(Objet.nom_marque, Objet.nom_model, func.count(Reservation.id).label("total_res"))
-        .join(Reservation, Objet.id_objet == Reservation.id_objet)
-        .filter(Reservation.date_reservation >= thirty_days_ago)
-        .group_by(Objet.id_objet, Objet.nom_marque, Objet.nom_model)
-        .order_by(func.count(Reservation.id).desc())
+    # KPI : Total Favoris
+    total_favorites = db.query(Favori).count()
+
+    # Top Favoris : Top 10 des objets réellement ajoutés en favoris (INNER JOIN)
+    top_favorited = (
+        db.query(Objet, func.count(Favori.id_objet).label("fav_count"))
+        .join(Favori, Objet.id_objet == Favori.id_objet)
+        .group_by(Objet.id_objet)
+        .order_by(func.count(Favori.id_objet).desc(), Objet.id_objet.asc())
         .limit(10)
         .all()
     )
 
-    # Tendance des réservations sur 30 jours (LineChart)
-    trend_data = (
-        db.query(cast(Reservation.date_reservation, Date).label("day"), func.count(Reservation.id))
-        .filter(Reservation.date_reservation >= thirty_days_ago)
-        .group_by(cast(Reservation.date_reservation, Date))
-        .order_by(cast(Reservation.date_reservation, Date))
+    popular_items = [
+        {
+            "id": o.id_objet,
+            "marque": o.nom_marque,
+            "modele": o.nom_model,
+            "count": fav_count,
+            "statut": o.statut
+        } for o, fav_count in top_favorited
+    ]
+
+    # KPI Cybersécurité
+    quarantine_count = sum(v for k, v in stats_dict.items() if "quarantaine" in str(k).lower())
+    security_alerts_active = (
+        db.query(Alerte)
+        .filter(Alerte.source == "Security", Alerte.est_resolu == False)
+        .count()
+    )
+    security_alerts = (
+        db.query(Alerte)
+        .filter(Alerte.source == "Security", Alerte.est_resolu == False)
+        .order_by(Alerte.date_alerte.desc())
+        .limit(10)
         .all()
     )
 
     return {
         "kpi": {
-            "total_users": total_users,
-            "total_equipments": total_equipments,
             "available_count": available_count,
             "occupied_count": occupied_count,
-            "broken_count": broken_count
+            "broken_count": broken_count,
+            "quarantine_count": quarantine_count,
+            "security_alerts_active": security_alerts_active,
+        },
+        "security": {
+            "active_alerts": [
+                {
+                    "id": a.id_alerte,
+                    "message": a.message,
+                    "niveau": a.niveau,
+                    "id_objet": a.id_objet,
+                    "date_alerte": a.date_alerte.isoformat() if a.date_alerte else None,
+                }
+                for a in security_alerts
+            ],
         },
         "details": {
             "users": [
-                {"id": u.id_utilisateur, "nom": u.nom, "prenom": u.prenom, "email": u.email, "role": u.role} 
+                {"id": u.id_utilisateur, "nom": u.nom, "prenom": u.prenom, "email": u.email} 
                 for u in all_users
             ],
             "equipments": [
@@ -99,35 +115,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
                 {"name": "Occupé", "value": occupied_count, "color": "#f39c12"},
                 {"name": "En panne", "value": broken_count, "color": "#e74c3c"}
             ],
-            "room_bars": room_stats,
-            "reservation_trend": [
-                {"date": str(t[0]), "count": t[1]} for t in trend_data
-            ]
+            "room_bars": room_stats
         },
         "events": {
-            "active_alerts": [
-                {
-                    "id": a.id_alerte,
-                    "message": a.message,
-                    "date": a.date_alerte,
-                    "niveau": a.niveau
-                } for a in active_alerts
-            ],
-            "recent_reservations": [
-                {
-                    "reservation_id": r.Reservation.id,
-                    "user": f"{r.nom} {r.prenom}",
-                    "object_model": r.nom_model,
-                    "date": r.Reservation.date_reservation,
-                    "status": r.Reservation.statut_reservation
-                } for r in recent_reservations
-            ],
-            "top_10_mensuel": [
-                {
-                    "marque": t[0],
-                    "modele": t[1],
-                    "reservations": t[2]
-                } for t in top_10
-            ]
+            "popular_items": popular_items
         }
     }

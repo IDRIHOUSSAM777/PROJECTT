@@ -8,16 +8,24 @@ const Signup = () => {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({ nom: '', prenom: '', email: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError('');
+    setLoading(true);
     try {
       await api.post('/signup', formData);
-      alert(t('auth.signupSuccess'));
       navigate(`/verify-email?email=${encodeURIComponent(formData.email)}`);
     } catch (err) {
-      setError(err.response?.data?.detail || t('auth.signupError'));
+      if (err.response?.status === 429) {
+        setError('Trop de tentatives. Réessayez dans une minute.');
+      } else {
+        const detail = err.response?.data?.detail;
+        setError(Array.isArray(detail) ? detail[0].msg : (detail || t('auth.signupError') || 'Error'));
+      }
+      setLoading(false);
     }
   };
 
@@ -42,7 +50,9 @@ const Signup = () => {
           <input type="email" className="input" placeholder={t('auth.email')} onChange={e => setFormData({ ...formData, email: e.target.value })} required />
           <input type="password" className="input" placeholder={t('auth.password')} onChange={e => setFormData({ ...formData, password: e.target.value })} required />
 
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>{t('auth.createMyAccount')}</button>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
+            {loading ? (t('auth.creating') || 'Création en cours…') : t('auth.createMyAccount')}
+          </button>
         </form>
 
         <Link to="/login" className="auth-link">{t('auth.alreadyAccount')}</Link>

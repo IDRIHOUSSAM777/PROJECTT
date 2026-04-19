@@ -5,18 +5,20 @@ import { useI18n } from '../i18n';
 
 const PAGE_SIZE = 10;
 
-const parseBooleanParam = (value) => value === '1' || value === 'true';
+
+const parseStringParam = (value) => {
+  if (!value || value === 'null' || value === 'undefined') return '';
+  return value;
+}
 
 const filtersFromParams = (params) => ({
-  type: params.get('type') || '',
-  marque: params.get('marque') || '',
-  fonction: params.get('fonction') || '',
-  statut: params.get('statut') || '',
-  etage: params.get('etage') || '',
-  salle: params.get('salle') || '',
-  distance: parseBooleanParam(params.get('distance')),
-  distance_max: params.get('distance_max') || '',
-  sort_by: params.get('sort_by') || '',
+  type: parseStringParam(params.get('type')),
+  marque: parseStringParam(params.get('marque')),
+  fonction: parseStringParam(params.get('fonction')),
+  statut: parseStringParam(params.get('statut')),
+  etage: parseStringParam(params.get('etage')),
+  salle: parseStringParam(params.get('salle')),
+  distance_max: parseStringParam(params.get('distance_max')),
 });
 
 const buildParams = (query, filters, saveClick = false) => {
@@ -30,13 +32,13 @@ const buildParams = (query, filters, saveClick = false) => {
   if (filters.statut) urlParams.set('statut', filters.statut);
   if (filters.etage) urlParams.set('etage', filters.etage);
   if (filters.salle) urlParams.set('salle', filters.salle);
-  if (filters.distance) {
-    urlParams.set('distance', '1');
-    if (filters.distance_max !== '' && Number(filters.distance_max) >= 0) {
-      urlParams.set('distance_max', String(filters.distance_max));
-    }
+  // Tri par distance activé en permanence : le backend trie par
+  // (étage, distance, pertinence). Si la position utilisateur n'est
+  // pas définie, distance_m est inconnue et le tri retombe sur la pertinence.
+  urlParams.set('distance', '1');
+  if (filters.distance_max !== '' && Number(filters.distance_max) >= 0) {
+    urlParams.set('distance_max', String(filters.distance_max));
   }
-  if (filters.sort_by) urlParams.set('sort_by', filters.sort_by);
 
   if (saveClick && value) {
     urlParams.set('save', '1');
@@ -98,6 +100,7 @@ const Search = () => {
   const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const [recommendations, setRecommendations] = useState([]);
 
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -125,7 +128,7 @@ const Search = () => {
     const q = (searchParams.get('q') || '').trim();
 
     const urlParams = new URLSearchParams();
-    const keys = ['q', 'type', 'marque', 'fonction', 'statut', 'etage', 'salle', 'distance', 'distance_max', 'sort_by'];
+    const keys = ['q', 'type', 'marque', 'fonction', 'statut', 'etage', 'salle', 'distance', 'distance_max'];
 
     keys.forEach((key) => {
       const val = searchParams.get(key);
@@ -190,6 +193,14 @@ const Search = () => {
     setQuery(params.get('q') || '');
     setFilters(filtersFromParams(params));
   }, [params]);
+
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) return;
+    api
+      .get('/users/me/recommendations', { params: { limit: 4 } })
+      .then((res) => setRecommendations(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setRecommendations([]));
+  }, []);
 
   useEffect(() => {
     const shouldSave = params.get('save') === '1';
@@ -275,19 +286,6 @@ const Search = () => {
     return options.salles.filter((s) => String(s.num_etage) === String(filters.etage));
   }, [options.salles, filters.etage]);
 
-  const handleDistanceCheck = (checked) => {
-    if (checked) {
-      if (userPos) {
-        updateFilter('distance', true);
-      } else {
-        alert("📍 Vous devez d'abord définir votre position sur la Carte avant de pouvoir trier par distance.");
-        navigate('/map');
-      }
-    } else {
-      updateFilter('distance', false);
-    }
-  };
-
   const updateFilter = (name, value) => {
     setFilters((prev) => {
       const next = { ...prev, [name]: value };
@@ -297,10 +295,6 @@ const Search = () => {
         if (salleSelected && String(salleSelected.num_etage) !== String(value)) {
           next.salle = '';
         }
-      }
-
-      if (name === 'distance' && !value) {
-        next.distance_max = '';
       }
 
       return next;
@@ -315,9 +309,7 @@ const Search = () => {
       statut: '',
       etage: '',
       salle: '',
-      distance: false,
       distance_max: '',
-      sort_by: '',
     });
   };
 
@@ -338,15 +330,14 @@ const Search = () => {
       statut: filters.statut,
       etage: filters.etage,
       salle: filters.salle,
-      distance: filters.distance,
+      distance: true,
       distance_max: filters.distance_max,
-      sort_by: filters.sort_by,
-      ...(filters.distance && userPos ? { user_x: userPos.x, user_y: userPos.y, user_etage: userPos.etage } : {})
+      ...(userPos ? { user_x: userPos.x, user_y: userPos.y, user_etage: userPos.etage } : {})
     };
     console.log("🚀 Payload backend :", JSON.stringify(payload, null, 2));
 
     const p = buildParams(value, filters, true);
-    if (filters.distance && userPos) {
+    if (userPos) {
       p.set('user_x', userPos.x);
       p.set('user_y', userPos.y);
       if (userPos.etage) p.set('user_etage', userPos.etage);
@@ -400,7 +391,6 @@ const Search = () => {
     filters.statut,
     filters.etage,
     filters.salle,
-    filters.distance ? 'distance' : '',
     filters.distance_max,
   ].filter(Boolean).length;
 
@@ -553,28 +543,6 @@ const Search = () => {
                 </select>
               </label>
 
-              <label className="filter-field filter-switch" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', justifyContent: 'space-between' }}>
-                  <span>{t('search.distanceSort')} (proche → loin)</span>
-                  <input
-                    type="checkbox"
-                    checked={filters.distance}
-                    onChange={(e) => handleDistanceCheck(e.target.checked)}
-                  />
-                </div>
-                {filters.distance && userPos && (
-                  <div style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '4px' }}>
-                    📍 Position ({Math.round(userPos.x)}, {Math.round(userPos.y)})
-                    <span
-                      style={{ textDecoration: 'underline', cursor: 'pointer', marginLeft: '8px' }}
-                      onClick={() => setShowMapModal(true)}
-                    >
-                      Modifier
-                    </span>
-                  </div>
-                )}
-              </label>
-
               <label className="filter-field">
                 <span>{t('search.distanceMax')}</span>
                 <input
@@ -585,7 +553,8 @@ const Search = () => {
                   placeholder={t('search.distanceExample')}
                   value={filters.distance_max}
                   onChange={(e) => updateFilter('distance_max', e.target.value)}
-                  disabled={!filters.distance}
+                  disabled={!userPos}
+                  title={!userPos ? "Définissez votre position sur la Carte pour activer ce filtre" : ''}
                 />
               </label>
             </div>
@@ -599,27 +568,44 @@ const Search = () => {
 
 
 
-        <div className="found" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{loading ? t('search.searching') : `${results.length} ${t('search.results')}`}</span>
+        {!query.trim() && recommendations.length > 0 && (
+          <section className="recommendations" style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <i className="fa-solid fa-sparkles" style={{ color: 'var(--primary)' }} />
+              {locale === 'ar' ? 'مقترح لك' : locale === 'en' ? 'For you' : locale === 'es' ? 'Para ti' : 'Pour vous'}
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+              {recommendations.map((r) => (
+                <article
+                  key={r.id_objet}
+                  className="card reco-card"
+                  onClick={() => navigate(`/equipment/${r.id_objet}`)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 14, cursor: 'pointer', gap: 8 }}
+                >
+                  {r.url_photo ? (
+                    <img
+                      src={`http://127.0.0.1:8000${r.url_photo}`}
+                      alt={r.nom_model}
+                      style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                    />
+                  ) : (
+                    <div style={{ width: 64, height: 64, background: 'var(--surface-2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                      <i className={`fa-solid ${getIcon(r.type_objet)}`} style={{ fontSize: 26 }} />
+                    </div>
+                  )}
+                  <div style={{ fontWeight: 600, fontSize: 14, textAlign: 'center' }}>{r.nom_model}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-soft)', textAlign: 'center' }}>
+                    {translateData('type', r.type_objet)} · {r.nom_marque}
+                  </div>
+                  <span className={`badge ${getStatusClass(r.statut)}`}>{translateData('status', r.statut)}</span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
-          <div className="sort-by-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '14px', color: 'var(--text-soft)' }}>
-              {locale === 'ar' ? 'ترتيب حسب:' : locale === 'en' ? 'Sort by:' : locale === 'es' ? 'Ordenar por:' : 'Trier par :'}
-            </span>
-            <select
-              className="select"
-              style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '14px', minWidth: '150px' }}
-              value={filters.sort_by}
-              onChange={(e) => {
-                updateFilter('sort_by', e.target.value);
-                setParams(buildParams(query, { ...filters, sort_by: e.target.value }, false), { replace: true });
-              }}
-            >
-              <option value="">{locale === 'ar' ? 'الصلة (اقتراضي)' : locale === 'en' ? 'Relevance (Default)' : locale === 'es' ? 'Relevancia (Por defecto)' : 'Pertinence (Défaut)'}</option>
-              <option value="distance">{locale === 'ar' ? 'الأقرب' : locale === 'en' ? 'Nearest' : locale === 'es' ? 'Más cercano' : 'Le plus proche'}</option>
-              <option value="popularity">{locale === 'ar' ? 'الأكثر استخداماً' : locale === 'en' ? 'Most Used' : locale === 'es' ? 'Más usado' : 'Le plus utilisé'}</option>
-            </select>
-          </div>
+        <div className="found">
+          <span>{loading ? t('search.searching') : `${results.length} ${t('search.results')}`}</span>
         </div>
 
         <section className="results">

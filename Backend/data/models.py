@@ -56,6 +56,7 @@ class Alerte(Base):
     id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), nullable=True) # Null si c'est l'IoT
     
     objet = relationship("Objet", back_populates="alertes")
+    utilisateur = relationship("Utilisateur")
 
 
 class Objet(Base):
@@ -72,16 +73,22 @@ class Objet(Base):
     pos_y = Column(Float, nullable=True)
     statut = Column(String, default="Disponible", index=True) # Disponible, Occupé, Panne
     last_heartbeat = Column(DateTime, default=datetime.utcnow)
-    
+    date_integration = Column(DateTime, default=datetime.utcnow, nullable=True)
+
+    # Gestion alimentation physique (Wake-on-LAN)
+    supports_wol = Column(Boolean, default=False)  # L'équipement accepte les Magic Packets
+    power_state = Column(String, default="unknown")  # on | sleep | unknown
+    last_wake_at = Column(DateTime, nullable=True)  # Dernier réveil déclenché par l'app
+
     url_photo = Column(String, nullable=True)
-    
+
     # Clé étrangère indexée pour la performance
     id_salle = Column(Integer, ForeignKey("salles.id_salle"), index=True)
 
     salle = relationship("Salle", back_populates="objets")
-    reservations = relationship("Reservation", back_populates="objet")
     fonctionnalites = relationship("Fonctionnalite", secondary=association_objet_fonction, back_populates="objets")
     alertes = relationship("Alerte", back_populates="objet")
+    favoris_par = relationship("Favori", back_populates="objet", cascade="all, delete-orphan")
     
     # OPTIMISATION MAJEURE : Index Composite pour la recherche Full-Text
     __table_args__ = (
@@ -104,24 +111,22 @@ class Utilisateur(Base):
     prenom = Column(String)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
-    role = Column(String, default="Utilisateur") # "Utilisateur" ou "Admin"
-    est_verifie = Column(Boolean, default=False)
     code_verification = Column(String, nullable=True)
-
-    reservations = relationship("Reservation", back_populates="utilisateur")
+    otp_expires_at = Column(DateTime, nullable=True)
+    otp_attempts = Column(Integer, default=0)
+    est_verifie = Column(Boolean, default=False)
     historiques = relationship("Historique", back_populates="utilisateur")
-    notifications = relationship("Notification", back_populates="utilisateur")
+    favoris = relationship("Favori", back_populates="utilisateur", cascade="all, delete-orphan")
 
-class Reservation(Base):
-    __tablename__ = "reservations"
-    id = Column(Integer, primary_key=True, index=True)
-    id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), index=True)
-    id_objet = Column(Integer, ForeignKey("objets.id_objet"), index=True)
-    date_reservation = Column(DateTime, default=datetime.utcnow)
-    statut_reservation = Column(String, default="Active")
 
-    utilisateur = relationship("Utilisateur", back_populates="reservations")
-    objet = relationship("Objet", back_populates="reservations")
+class Favori(Base):
+    __tablename__ = "favoris"
+    id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), primary_key=True)
+    id_objet = Column(Integer, ForeignKey("objets.id_objet"), primary_key=True)
+    date_ajout = Column(DateTime, default=datetime.utcnow)
+
+    utilisateur = relationship("Utilisateur", back_populates="favoris")
+    objet = relationship("Objet", back_populates="favoris_par")
 
 class Historique(Base):
     __tablename__ = "historiques"
@@ -131,20 +136,3 @@ class Historique(Base):
     id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), index=True)
     
     utilisateur = relationship("Utilisateur", back_populates="historiques")
-
-
-class Notification(Base):
-    __tablename__ = "notifications"
-    id_notification = Column(Integer, primary_key=True, index=True)
-    message = Column(String, nullable=False)
-    type_notification = Column(String, default="INFO")
-    est_lu = Column(Boolean, default=False, index=True)
-    date_notification = Column(DateTime, default=datetime.utcnow, index=True)
-
-    id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), index=True)
-    id_objet = Column(Integer, ForeignKey("objets.id_objet"), nullable=True, index=True)
-    id_reservation = Column(Integer, ForeignKey("reservations.id"), nullable=True, index=True)
-
-    utilisateur = relationship("Utilisateur", back_populates="notifications")
-
-

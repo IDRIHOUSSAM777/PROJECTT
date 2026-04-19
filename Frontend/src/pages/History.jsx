@@ -56,38 +56,36 @@ const statusClass = (status) => {
 const History = () => {
   const { t, translateData, locale } = useI18n();
   const [history, setHistory] = useState([]);
-  const [reservations, setReservations] = useState([]);
-  const [actionsPage, setActionsPage] = useState(1);
   const [searchPage, setSearchPage] = useState(1);
+  const [selectedId, setSelectedId] = useState(null);
   const navigate = useNavigate();
 
+  const deleteEntry = async (id, e) => {
+    e?.stopPropagation();
+    try {
+      await api.delete(`/users/me/history/${id}`);
+      setHistory((prev) => prev.filter((h) => h.id_historique !== id));
+      setSelectedId(null);
+    } catch {
+      // silencieux : rollback non nécessaire si la requête échoue
+    }
+  };
+
   useEffect(() => {
-    Promise.all([api.get('/users/me/history'), api.get('/users/me/reservations')])
-      .then(([h, r]) => {
+    api.get('/users/me/history')
+      .then((h) => {
         setHistory(Array.isArray(h.data) ? h.data : []);
-        setReservations(Array.isArray(r.data) ? r.data : []);
       })
       .catch(() => {
         setHistory([]);
-        setReservations([]);
       });
   }, []);
-
-  useEffect(() => {
-    setActionsPage(1);
-  }, [reservations.length]);
 
   useEffect(() => {
     setSearchPage(1);
   }, [history.length]);
 
-  const actionsTotalPages = Math.max(1, Math.ceil(reservations.length / PAGE_SIZE));
   const searchTotalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
-
-  const pagedReservations = useMemo(() => {
-    const start = (actionsPage - 1) * PAGE_SIZE;
-    return reservations.slice(start, start + PAGE_SIZE);
-  }, [reservations, actionsPage]);
 
   const pagedHistory = useMemo(() => {
     const start = (searchPage - 1) * PAGE_SIZE;
@@ -104,74 +102,75 @@ const History = () => {
 
         <section className="history-panel card">
           <div className="history-panel-head">
-            <h2><i className="fa-solid fa-wave-square" /> {t('history.recentActions')}</h2>
-          </div>
-          <div className="history-panel-body">
-            {reservations.length === 0 && <div className="history-empty">{t('history.noRecentActions')}</div>}
-
-            {pagedReservations.map((r, i) => {
-              const status = String(r.statut_reservation || '').toUpperCase();
-              const iconName = status === 'ACTIVE' ? 'fa-rotate-right' : (status === 'WAITING' ? 'fa-hourglass-half' : 'fa-circle-check');
-
-              return (
-                <article
-                  key={`${r.id}-${i}`}
-                  className="history-action-row"
-                  onClick={() => navigate(`/equipment/${r.objet.id_objet}`)}
-                >
-                  <div className="history-action-left">
-                    <div className="history-action-icon">
-                      <i className={`fa-solid ${iconName}`} />
-                    </div>
-                    <div>
-                      <div className="history-action-title">{t('history.equipmentReservation')}</div>
-                      <div className="history-action-sub">{t('common.target')}: {r.objet.nom_model}</div>
-                    </div>
-                  </div>
-
-                  <div className="history-action-right">
-                    <span className="history-action-date"><i className="fa-regular fa-clock" /> {formatActionDate(r.date_reservation, t, locale)}</span>
-                    <span className={`history-status ${statusClass(r.statut_reservation)}`}>
-                      {translateData('reservationStatus', r.statut_reservation)}
-                    </span>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-
-          {actionsTotalPages > 1 && (
-            <div className="pagination history-pagination">
-              <button className="btn pagination-btn" disabled={actionsPage === 1} onClick={() => setActionsPage((p) => Math.max(1, p - 1))}>
-                {t('common.previous')}
-              </button>
-              <span className="pagination-info">{t('common.page')} {actionsPage} / {actionsTotalPages}</span>
-              <button className="btn pagination-btn" disabled={actionsPage === actionsTotalPages} onClick={() => setActionsPage((p) => Math.min(actionsTotalPages, p + 1))}>
-                {t('common.next')}
-              </button>
-            </div>
-          )}
-        </section>
-
-        <section className="history-panel card history-panel-gap">
-          <div className="history-panel-head">
             <h2><i className="fa-solid fa-magnifying-glass" /> {t('history.searchHistory')}</h2>
           </div>
           <div className="history-panel-body">
             {history.length === 0 && <div className="history-empty">{t('history.noSearchHistory')}</div>}
 
-            {pagedHistory.map((h, i) => (
-              <article
-                key={`${h.date_his}-${i}`}
-                className="history-search-simple"
-                onClick={() => navigate(`/search?q=${encodeURIComponent(h.requete_search)}`)}
-              >
-                <span className="history-query-text">{h.requete_search}</span>
-                <span className="history-search-time">
-                  <i className="fa-regular fa-clock" /> {formatRelativeTime(h.date_his, t, locale)}
-                </span>
-              </article>
-            ))}
+            {pagedHistory.map((h, i) => {
+              const isSelected = selectedId === h.id_historique;
+              return (
+                <article
+                  key={h.id_historique ?? `${h.date_his}-${i}`}
+                  className="history-search-simple"
+                  style={{ position: 'relative' }}
+                  onClick={() => setSelectedId(isSelected ? null : h.id_historique)}
+                >
+                  <span className="history-query-text">{h.requete_search}</span>
+                  <span className="history-search-time" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span><i className="fa-regular fa-clock" /> {formatRelativeTime(h.date_his, t, locale)}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/search?q=${encodeURIComponent(h.requete_search)}`);
+                      }}
+                      title={t('history.searchAgain') || 'Relancer la recherche'}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--primary)',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                      }}
+                    >
+                      <i className="fa-solid fa-arrow-right"></i>
+                    </button>
+                  </span>
+                  {isSelected && (
+                    <button
+                      type="button"
+                      onClick={(e) => deleteEntry(h.id_historique, e)}
+                      title={t('common.delete') || 'Supprimer'}
+                      style={{
+                        position: 'absolute',
+                        top: '-10px',
+                        right: '-10px',
+                        width: '28px',
+                        height: '28px',
+                        borderRadius: '50%',
+                        background: '#dc2626',
+                        color: 'white',
+                        border: '2px solid white',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 10px rgba(220, 38, 38, 0.4)',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        animation: 'fadeIn 0.18s ease-out',
+                        zIndex: 2,
+                      }}
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  )}
+                </article>
+              );
+            })}
           </div>
 
           {searchTotalPages > 1 && (

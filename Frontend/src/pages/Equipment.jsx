@@ -35,35 +35,125 @@ const Equipment = () => {
   const navigate = useNavigate();
 
   const [equipment, setEquipment] = useState(null);
-  const [queueInfo, setQueueInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState({ text: '', type: '' });
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [favBusy, setFavBusy] = useState(false);
+  const [favPulse, setFavPulse] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportText, setReportText] = useState('');
+  const [reportBusy, setReportBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState('');
 
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError('');
 
     try {
-      const [detailsRes, queueRes, userRes] = await Promise.all([
-        api.get(`/objects/${id}`),
-        api.get(`/objects/${id}/queue`),
+      const [detailsRes, userRes] = await Promise.all([
+        api.get(`/objets/${id}`),
         api.get('/users/me').catch(() => ({ data: {} })),
       ]);
 
       setEquipment(detailsRes.data || null);
-      setQueueInfo(queueRes.data || null);
-      setIsAdmin(userRes.data?.role === 'Admin');
+      const admin = userRes.data?.email === 'admin@smartfind.com';
+      setIsAdmin(admin);
+
+      try {
+        const favRes = await api.get('/users/me/favorites');
+        const list = Array.isArray(favRes.data) ? favRes.data : [];
+        setIsFavorite(list.some((f) => Number(f.id_objet) === Number(id)));
+      } catch {
+        setIsFavorite(false);
+      }
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setError(typeof detail === 'string' ? detail : t('equipment.notFoundTitle'));
       setEquipment(null);
-      setQueueInfo(null);
     } finally {
       if (showLoading) setLoading(false);
+    }
+  };
+
+  const toggleFavorite = async () => {
+    if (favBusy) return;
+    const wasFavorite = isFavorite;
+    setIsFavorite(!wasFavorite);
+    setFavPulse(true);
+    setTimeout(() => setFavPulse(false), 450);
+    setFavBusy(true);
+    try {
+      if (wasFavorite) {
+        await api.delete(`/users/me/favorites/${id}`);
+      } else {
+        await api.post(`/users/me/favorites/${id}`);
+      }
+    } catch (err) {
+      setIsFavorite(wasFavorite);
+      const detail = err?.response?.data?.detail;
+      setFeedback({ text: typeof detail === 'string' ? detail : 'Erreur', type: 'error' });
+      setTimeout(() => setFeedback({ text: '', type: '' }), 2500);
+    } finally {
+      setFavBusy(false);
+    }
+  };
+
+  const submitReport = async () => {
+    const text = reportText.trim();
+    if (!text) return;
+    setReportBusy(true);
+    try {
+      await api.post(`/objets/${id}/report`, { description: text });
+      setFeedback({ text: 'Panne signalée. Merci !', type: 'success' });
+      setReportOpen(false);
+      setReportText('');
+      loadData(false);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFeedback({ text: typeof detail === 'string' ? detail : 'Échec du signalement', type: 'error' });
+    } finally {
+      setReportBusy(false);
+      setTimeout(() => setFeedback({ text: '', type: '' }), 3000);
+    }
+  };
+
+  const wakeObjet = async () => {
+    if (actionBusy) return;
+    setActionBusy('wake');
+    try {
+      const res = await api.post(`/objets/${id}/wake`);
+      const msg = res?.data?.message || 'Magic Packet envoyé.';
+      setFeedback({ text: msg, type: 'success' });
+      loadData(false);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFeedback({
+        text: typeof detail === 'string' ? detail : 'Échec du réveil WoL',
+        type: 'error',
+      });
+    } finally {
+      setActionBusy('');
+      setTimeout(() => setFeedback({ text: '', type: '' }), 3500);
+    }
+  };
+
+  const invokeAction = async (actionName) => {
+    if (actionBusy) return;
+    setActionBusy(actionName);
+    try {
+      const res = await api.post(`/objets/${id}/action`, { action: actionName });
+      const msg = res?.data?.message || `Action "${actionName}" exécutée`;
+      setFeedback({ text: msg, type: 'success' });
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      setFeedback({ text: typeof detail === 'string' ? detail : `Échec de l'action ${actionName}`, type: 'error' });
+    } finally {
+      setActionBusy('');
+      setTimeout(() => setFeedback({ text: '', type: '' }), 3000);
     }
   };
 
@@ -71,81 +161,7 @@ const Equipment = () => {
     loadData(true);
   }, [id]);
 
-  const reservationStatus = normalizeStatus(equipment?.my_reservation_status);
-
-  const isMyReservationActive = reservationStatus === 'ACTIVE';
-  const isMyReservationWaiting = reservationStatus === 'WAITING';
-  const hasMyReservation = isMyReservationActive || isMyReservationWaiting;
-
-  const waitingCount = useMemo(() => {
-    const queueCount = Number(queueInfo?.waiting_count);
-    if (Number.isFinite(queueCount)) return queueCount;
-
-    const detailsCount = Number(equipment?.queue_count);
-    if (Number.isFinite(detailsCount)) return detailsCount;
-
-    return 0;
-  }, [queueInfo, equipment]);
-
-  const handleReserve = async () => {
-    setActionLoading(true);
-    setFeedback({ text: '', type: '' });
-
-    try {
-      const res = await api.post('/reservations', { object_id: Number(id) });
-      setFeedback({ text: res.data?.message || t('equipment.reservationHandled'), type: 'success' });
-      await loadData(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFeedback({ text: typeof detail === 'string' ? detail : t('equipment.reserveError'), type: 'error' });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCancelReservation = async () => {
-    setActionLoading(true);
-    setFeedback({ text: '', type: '' });
-
-    try {
-      let res;
-      if (equipment?.my_reservation_id) {
-        res = await api.delete(`/reservations/${equipment.my_reservation_id}`);
-      } else {
-        res = await api.delete(`/reservations?object_id=${id}`);
-      }
-
-      setFeedback({ text: res?.data?.message || t('equipment.cancelledSuccess'), type: 'success' });
-      await loadData(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFeedback({ text: typeof detail === 'string' ? detail : t('equipment.cancelError'), type: 'error' });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleCompleteReservation = async () => {
-    setActionLoading(true);
-    setFeedback({ text: '', type: '' });
-
-    try {
-      if (!equipment?.my_reservation_id) {
-        setFeedback({ text: t('equipment.completeMissing'), type: 'error' });
-        return;
-      }
-
-      const res = await api.post(`/reservations/${equipment.my_reservation_id}/complete`);
-      setFeedback({ text: res.data?.message || t('equipment.completedSuccess'), type: 'success' });
-      await loadData(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFeedback({ text: typeof detail === 'string' ? detail : t('equipment.completeError'), type: 'error' });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
+  // Reservation logic removed
   if (loading) {
     return (
       <main className="page-pad equipment-page">
@@ -188,6 +204,21 @@ const Equipment = () => {
   return (
     <main className="page-pad equipment-page">
       <div className="container">
+        {feedback.text && (
+          <div
+            style={{
+              padding: '12px 16px',
+              borderRadius: '8px',
+              marginBottom: '14px',
+              fontWeight: 'bold',
+              background: feedback.type === 'success' ? '#dcfce7' : '#fee2e2',
+              color: feedback.type === 'success' ? '#166534' : '#991b1b',
+              border: `1px solid ${feedback.type === 'success' ? '#86efac' : '#fecaca'}`,
+            }}
+          >
+            {feedback.text}
+          </div>
+        )}
         <div className="equip-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button className="icon-btn" onClick={() => navigate(-1)}>
@@ -199,32 +230,95 @@ const Equipment = () => {
             </div>
           </div>
 
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            {equipment.supports_wol && (
               <button
-                onClick={() => navigate(`/admin/equipment/${id}/edit`)}
-                style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
-              >
-                <i className="fa-solid fa-pen"></i> Modifier
-              </button>
-              <button
-                onClick={async () => {
-                  if (window.confirm("Êtes-vous sûr de vouloir supprimer cet équipement définitivement ?")) {
-                    try {
-                      await api.delete(`/objets/${id}`);
-                      alert("Équipement supprimé");
-                      navigate(-1);
-                    } catch (err) {
-                      alert("Erreur lors de la suppression.");
-                    }
-                  }
+                type="button"
+                onClick={wakeObjet}
+                disabled={!!actionBusy}
+                title="Envoyer un Magic Packet Wake-on-LAN"
+                style={{
+                  background: actionBusy === 'wake' ? '#94a3b8' : '#f59e0b',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  cursor: actionBusy ? 'wait' : 'pointer',
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}
-                style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
               >
-                <i className="fa-solid fa-trash"></i> Supprimer
+                <i className={`fa-solid ${actionBusy === 'wake' ? 'fa-spinner fa-spin' : 'fa-power-off'}`}></i>
+                {actionBusy === 'wake' ? 'Réveil…' : 'Réveiller (WoL)'}
               </button>
-            </div>
-          )}
+            )}
+            {!isAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setReportOpen(true)}
+                  title="Signaler une panne"
+                  style={{
+                    background: '#fee2e2',
+                    color: '#b91c1c',
+                    border: '1px solid #fecaca',
+                    padding: '10px 16px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                  }}
+                >
+                  <i className="fa-solid fa-triangle-exclamation"></i>
+                  Signaler une panne
+                </button>
+                <button
+                  type="button"
+                  className={`fav-btn ${isFavorite ? 'is-active' : ''} ${favPulse ? 'is-pulse' : ''}`}
+                  onClick={toggleFavorite}
+                  disabled={favBusy}
+                  aria-pressed={isFavorite}
+                  aria-label={isFavorite ? t('equipment.removeFavorite') : t('equipment.addFavorite')}
+                  title={isFavorite ? t('equipment.removeFavorite') : t('equipment.addFavorite')}
+                >
+                  <i className={`fa-${isFavorite ? 'solid' : 'regular'} fa-star fav-btn-icon`} />
+                  <span className="fav-btn-label">
+                    {isFavorite ? t('equipment.removeFavorite') : t('equipment.addFavorite')}
+                  </span>
+                </button>
+              </>
+            )}
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => navigate(`/admin/equipment/${id}/edit`)}
+                  style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-pen"></i> Modifier
+                </button>
+                <button
+                  onClick={async () => {
+                    if (window.confirm("Êtes-vous sûr de vouloir supprimer cet équipement définitivement ?")) {
+                      try {
+                        await api.delete(`/objets/${id}`);
+                        alert("Équipement supprimé");
+                        navigate(-1);
+                      } catch (err) {
+                        alert("Erreur lors de la suppression.");
+                      }
+                    }
+                  }}
+                  style={{ background: '#ef4444', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <i className="fa-solid fa-trash"></i> Supprimer
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <section className="card equip-hero-card" style={{ display: 'flex', flexDirection: 'row', gap: '24px', alignItems: 'center', padding: '24px' }}>
@@ -247,7 +341,23 @@ const Equipment = () => {
                 <h2 className="equip-name" style={{ margin: '0 0 6px 0', fontSize: '1.8rem', fontWeight: 'bold' }}>{equipment.name}</h2>
                 <p className="equip-subtype" style={{ margin: 0, color: 'var(--muted)', fontSize: '1rem' }}>{translateData('type', equipment.type) || '-'} - {equipment.marque || '-'}</p>
               </div>
-              <span className={`badge ${statusClass}`}>{translateData('status', equipment.status)}</span>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span className={`badge ${statusClass}`}>{translateData('status', equipment.status)}</span>
+                {equipment.supports_wol && (
+                  <span
+                    className="badge"
+                    style={{
+                      background: equipment.power_state === 'on' ? '#dcfce7' : equipment.power_state === 'sleep' ? '#e0e7ff' : '#f1f5f9',
+                      color: equipment.power_state === 'on' ? '#166534' : equipment.power_state === 'sleep' ? '#3730a3' : '#475569',
+                      border: `1px solid ${equipment.power_state === 'on' ? '#86efac' : equipment.power_state === 'sleep' ? '#a5b4fc' : '#cbd5e1'}`,
+                    }}
+                    title="État d'alimentation (WoL)"
+                  >
+                    <i className={`fa-solid ${equipment.power_state === 'on' ? 'fa-bolt' : equipment.power_state === 'sleep' ? 'fa-moon' : 'fa-circle-question'}`} style={{ marginRight: 6 }} />
+                    {equipment.power_state === 'on' ? 'Allumé' : equipment.power_state === 'sleep' ? 'En veille' : 'État inconnu'}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="equip-meta-lines" style={{ display: 'flex', flexDirection: 'column', gap: '8px', margin: 0 }}>
@@ -280,12 +390,42 @@ const Equipment = () => {
             <h3>{t('common.features')}</h3>
             {Array.isArray(equipment.fonctionnalites) && equipment.fonctionnalites.length > 0 ? (
               <ul className="equip-list">
-                {equipment.fonctionnalites.map((feature) => (
-                  <li key={feature}>
-                    <i className="fa-solid fa-check" />
-                    <span>{feature}</span>
-                  </li>
-                ))}
+                {equipment.fonctionnalites.map((feature) => {
+                  const actionName = String(feature || '').toLowerCase();
+                  const busy = actionBusy === actionName;
+                  return (
+                    <li key={feature} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <i className="fa-solid fa-check" />
+                        <span>{feature}</span>
+                      </span>
+                      {!isAdmin && isAvailableStatus(equipment.status) && (
+                        <button
+                          type="button"
+                          onClick={() => invokeAction(actionName)}
+                          disabled={!!actionBusy}
+                          title={`Actionner : ${feature}`}
+                          style={{
+                            background: busy ? '#94a3b8' : 'var(--primary)',
+                            color: 'white',
+                            border: 'none',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            cursor: busy ? 'wait' : 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: 'bold',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                          }}
+                        >
+                          <i className={`fa-solid ${busy ? 'fa-spinner fa-spin' : 'fa-play'}`}></i>
+                          {busy ? '...' : 'Actionner'}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="equip-empty">{t('equipment.noFeatures')}</p>
@@ -299,63 +439,77 @@ const Equipment = () => {
             </p>
           </article>
 
-          <aside className="card equip-block equip-actions">
-            <h3>{t('equipment.reservation')}</h3>
-
-            {!hasMyReservation && (
-              <button
-                className="btn btn-primary equip-action-btn"
-                onClick={handleReserve}
-                disabled={actionLoading || isBrokenStatus(equipment.status)}
-              >
-                {isBrokenStatus(equipment.status)
-                  ? t('equipment.unavailable')
-                  : actionLoading
-                    ? t('equipment.processing')
-                    : normalizeStatus(equipment.status) === 'OCCUPÉ' || normalizeStatus(equipment.status) === 'RESERVÉ' || normalizeStatus(equipment.status) === 'RESERVED'
-                      ? t('equipment.joinQueue')
-                      : t('equipment.reserve')}
-              </button>
-            )}
-
-            {isMyReservationActive && (
-              <button
-                className="btn btn-primary equip-action-btn"
-                onClick={handleCompleteReservation}
-                disabled={actionLoading}
-              >
-                {actionLoading ? t('equipment.processing') : t('equipment.complete')}
-              </button>
-            )}
-
-            {isMyReservationWaiting && (
-              <button
-                className="btn equip-action-btn"
-                onClick={handleCancelReservation}
-                disabled={actionLoading}
-              >
-                {actionLoading ? t('equipment.processing') : t('equipment.cancel')}
-              </button>
-            )}
-
-            <div className="equip-queue">{t('equipment.queue')}: {waitingCount}</div>
-
-            {isMyReservationWaiting && (
-              <div className="chip chip-progress equip-chip">{t('equipment.waiting')}</div>
-            )}
-
-            {isMyReservationActive && (
-              <div className="chip chip-done equip-chip">{t('equipment.active')}</div>
-            )}
-
-            {feedback.text && (
-              <div className={`chip equip-chip ${feedback.type === 'error' ? 'chip-busy' : 'chip-done'}`}>
-                {feedback.text}
-              </div>
-            )}
-          </aside>
         </section>
       </div>
+
+      {reportOpen && (
+        <div
+          onClick={() => !reportBusy && setReportOpen(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000, padding: '20px',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--surface)', borderRadius: '12px',
+              padding: '24px', width: '100%', maxWidth: '480px',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 6px 0', display: 'flex', alignItems: 'center', gap: '10px', color: '#b91c1c' }}>
+              <i className="fa-solid fa-triangle-exclamation"></i>
+              Signaler une panne
+            </h3>
+            <p style={{ margin: '0 0 16px 0', color: 'var(--muted)', fontSize: '0.9rem' }}>
+              Décrivez brièvement le problème observé sur <strong>{equipment.name}</strong>.
+            </p>
+            <textarea
+              autoFocus
+              value={reportText}
+              onChange={(e) => setReportText(e.target.value)}
+              placeholder="Ex: Bourrage papier, écran noir, appareil ne s'allume plus..."
+              rows={4}
+              style={{
+                width: '100%', padding: '12px', borderRadius: '8px',
+                border: '1px solid var(--border)', background: 'var(--surface-2)',
+                color: 'var(--text)', fontSize: '0.95rem', resize: 'vertical',
+                fontFamily: 'inherit',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '16px' }}>
+              <button
+                type="button"
+                onClick={() => { setReportOpen(false); setReportText(''); }}
+                disabled={reportBusy}
+                style={{
+                  background: 'transparent', color: 'var(--text)',
+                  border: '1px solid var(--border)', padding: '10px 16px',
+                  borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold',
+                }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={submitReport}
+                disabled={reportBusy || !reportText.trim()}
+                style={{
+                  background: reportBusy ? '#94a3b8' : '#dc2626', color: 'white',
+                  border: 'none', padding: '10px 18px', borderRadius: '8px',
+                  cursor: reportBusy ? 'wait' : 'pointer', fontWeight: 'bold',
+                  display: 'flex', alignItems: 'center', gap: '8px',
+                }}
+              >
+                <i className={`fa-solid ${reportBusy ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
+                {reportBusy ? 'Envoi...' : 'Envoyer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

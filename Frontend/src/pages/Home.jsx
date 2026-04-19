@@ -10,7 +10,6 @@ const defaultFilters = {
   statut: '',
   etage: '',
   salle: '',
-  distance: false,
 };
 
 const Home = () => {
@@ -129,8 +128,7 @@ const Home = () => {
       filters.marque ||
       filters.statut ||
       filters.etage ||
-      filters.salle ||
-      filters.distance
+      filters.salle
     );
   }, [filters]);
 
@@ -142,7 +140,6 @@ const Home = () => {
       filters.statut,
       filters.etage,
       filters.salle,
-      filters.distance ? 'distance' : '',
     ].filter(Boolean).length;
   }, [filters]);
 
@@ -172,7 +169,8 @@ const Home = () => {
     if (filters.statut) params.set('statut', filters.statut);
     if (filters.etage) params.set('etage', filters.etage);
     if (filters.salle) params.set('salle', filters.salle);
-    if (filters.distance) params.set('distance', '1');
+    // Tri par distance activé par défaut (backend trie sur étage → distance → pertinence).
+    params.set('distance', '1');
     if (saveHistory && text) params.set('save', '1');
 
     return params.toString() ? `/search?${params.toString()}` : '/search';
@@ -367,14 +365,6 @@ const Home = () => {
                       </select>
                     </label>
 
-                    <label className="hero-filter-switch">
-                      <input
-                        type="checkbox"
-                        checked={filters.distance}
-                        onChange={(e) => updateFilter('distance', e.target.checked)}
-                      />
-                      <span>{t('home.distanceSort')}</span>
-                    </label>
                   </div>
 
                   <div className="hero-filter-foot">

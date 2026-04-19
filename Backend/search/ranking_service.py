@@ -1,4 +1,5 @@
 import math
+import os
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -6,33 +7,51 @@ from typing import Dict, List, Optional
 from data import models
 from search.nlp_service import normalize_text
 
-WAITING_STATUSES = {"WAITING", "EN ATTENTE"}
-CANCELLED_STATUSES = {"CANCELLED", "ANNULEE", "ANNULÉE", "DONE", "TERMINE", "TERMINÉ"}
+# Match tier bonuses — used by SmartSearchEngine to prioritize exact > synonym > fuzzy.
+# Tuned so that an exact hit always beats a synonym hit regardless of availability bonus (100),
+# and a synonym hit always beats a fuzzy/trigram hit.
+MATCH_TIER_BONUS = {
+    "exact": 500.0,
+    "synonym": 250.0,
+    "fuzzy": 100.0,
+    "trigram": 40.0,
+}
 
 class RankingEngine:
     @staticmethod
-    def distance_from_user(obj, user_x: float = 0.0, user_y: float = 0.0, user_etage: Optional[int] = None) -> float:
+    def distance_from_user(
+        obj,
+        user_x: Optional[float] = None,
+        user_y: Optional[float] = None,
+        user_etage: Optional[int] = None,
+    ) -> float:
         """
-        Calcule la distance euclidienne entre un objet et la position de l'utilisateur en intégrant l'étage.
-        Si l'objet n'est pas au même étage que l'utilisateur, on ajoute une pénalité de "marche" (ex: escaliers).
+        Distance entre l'objet et l'utilisateur (même unité que coord_x/coord_y).
+        Retourne inf dès qu'une donnée manque : signale "distance inconnue"
+        au lieu de forcer un faux (0,0) qui polluerait le ranking.
+        Le tri strict par étage est fait en aval dans search_engine._score_and_sort.
         """
         salle = getattr(obj, "salle", None)
-        if not salle: return float("inf")
+        if not salle:
+            return float("inf")
+        if user_x is None or user_y is None:
+            return float("inf")
         x, y = getattr(salle, "coord_x", None), getattr(salle, "coord_y", None)
-        if x is None or y is None: return float("inf")
-        
-        dx = float(x) - user_x
-        dy = float(y) - user_y
+        if x is None or y is None:
+            return float("inf")
+
+        dx = float(x) - float(user_x)
+        dy = float(y) - float(user_y)
         dist_2d = math.sqrt(dx**2 + dy**2)
-        
+
         if user_etage is not None and salle.num_etage is not None:
             etage_diff = abs(salle.num_etage - user_etage)
             if etage_diff > 0:
-                # Pénalité de marche réaliste pour l'affichage (escaliers = 25m)
-                # Le vrai TRI strict par étage se fait dans search_engine.py
-                vertical_penalty = etage_diff * 25.0
-                return math.sqrt(dist_2d**2 + vertical_penalty**2)
-                
+                # Pénalité "escaliers" dans la même unité que coord_x/y.
+                # Surchargeable via FLOOR_PENALTY_UNITS (par défaut : 25).
+                floor_penalty = float(os.getenv("FLOOR_PENALTY_UNITS", "25")) * etage_diff
+                return math.sqrt(dist_2d**2 + floor_penalty**2)
+
         return dist_2d
 
     @staticmethod
@@ -60,58 +79,36 @@ class RankingEngine:
 
     @staticmethod
     def distance_score(distance_value: float) -> float:
-        if not math.isfinite(distance_value): return 0.0
-        return max(0.0, 100.0 - (min(distance_value, 5000.0) / 50.0))
+        """
+        Bonus de proximité recalé sur les deltas réalistes en intérieur.
+        Horizon par défaut : 200 unités (surchargeable via DISTANCE_SCORE_MAX).
+        Mapping : d=0 → 100, d=DISTANCE_SCORE_MAX → 0, linéaire.
+        """
+        if not math.isfinite(distance_value):
+            return 0.0
+        horizon = float(os.getenv("DISTANCE_SCORE_MAX", "200"))
+        if horizon <= 0:
+            return 0.0
+        clamped = min(max(distance_value, 0.0), horizon)
+        return max(0.0, 100.0 * (1.0 - clamped / horizon))
 
     @staticmethod
     def load_waiting_counts(db: Session, object_ids: List[int]) -> Dict[int, int]:
-        if not object_ids: return {}
-        status_upper = func.upper(func.coalesce(models.Reservation.statut_reservation, ""))
-        rows = db.query(models.Reservation.id_objet, func.count(models.Reservation.id))\
-            .filter(models.Reservation.id_objet.in_(object_ids), status_upper.in_(list(WAITING_STATUSES)))\
-            .group_by(models.Reservation.id_objet).all()
-        return {int(oid): int(count or 0) for oid, count in rows}
+        return {}
 
     @staticmethod
     def load_popularity_counts(db: Session, object_ids: List[int]) -> Dict[int, int]:
-        if not object_ids: return {}
-        status_upper = func.upper(func.coalesce(models.Reservation.statut_reservation, ""))
-        rows = db.query(models.Reservation.id_objet, func.count(models.Reservation.id))\
-            .filter(models.Reservation.id_objet.in_(object_ids), ~status_upper.in_(list(CANCELLED_STATUSES)))\
-            .group_by(models.Reservation.id_objet).all()
-        return {int(oid): int(count or 0) for oid, count in rows}
+        return {}
 
     @staticmethod
     def sql_popularity_score():
-        from sqlalchemy import select, func, cast, Float
-        status_upper = func.upper(func.coalesce(models.Reservation.statut_reservation, ""))
-        
-        subq = select(
-            models.Reservation.id_objet,
-            func.count(models.Reservation.id).label("pop_count")
-        ).where(~status_upper.in_(list(CANCELLED_STATUSES)))\
-         .group_by(models.Reservation.id_objet).subquery()
-        
-        return func.coalesce(
-            select(subq.c.pop_count).where(subq.c.id_objet == models.Objet.id_objet).scalar_subquery(),
-            0
-        )
+        from sqlalchemy import literal
+        return literal(0.0)
 
     @staticmethod
     def sql_waiting_score():
-        from sqlalchemy import select, func
-        status_upper = func.upper(func.coalesce(models.Reservation.statut_reservation, ""))
-        
-        subq = select(
-            models.Reservation.id_objet,
-            func.count(models.Reservation.id).label("wait_count")
-        ).where(status_upper.in_(list(WAITING_STATUSES)))\
-         .group_by(models.Reservation.id_objet).subquery()
-         
-        return func.coalesce(
-            select(subq.c.wait_count).where(subq.c.id_objet == models.Objet.id_objet).scalar_subquery(),
-            0
-        )
+        from sqlalchemy import literal
+        return literal(0.0)
 
     @staticmethod
     def load_postgres_text_ranks(db: Session, object_ids: List[int], query_clean: str) -> Dict[int, float]:
@@ -143,7 +140,7 @@ class RankingEngine:
         if not query_clean:
             from sqlalchemy import literal
             return literal(0.0)
-            
+
         document = func.concat_ws(" ",
             func.coalesce(models.Objet.nom_model, ""),
             func.coalesce(models.Objet.type_objet, ""),
@@ -151,3 +148,19 @@ class RankingEngine:
             func.coalesce(models.Objet.description, "")
         )
         return func.ts_rank_cd(func.to_tsvector("simple", document), func.plainto_tsquery("simple", query_clean))
+
+    @staticmethod
+    def sql_trgm_similarity(query_clean: str):
+        """
+        Similarité trigramme Postgres (extension pg_trgm, index GIN déjà en place).
+        Retourne un score 0..1 utilisable en ORDER BY / filtrage pour le fallback fuzzy.
+        """
+        if not query_clean:
+            from sqlalchemy import literal
+            return literal(0.0)
+        document = func.concat_ws(" ",
+            func.coalesce(models.Objet.nom_model, ""),
+            func.coalesce(models.Objet.type_objet, ""),
+            func.coalesce(models.Objet.nom_marque, ""),
+        )
+        return func.similarity(document, query_clean)

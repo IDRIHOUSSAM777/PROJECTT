@@ -5,16 +5,17 @@ import Navbar from './components/Navbar';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import VerifyEmail from './pages/VerifyEmail';
+import ForgotPassword from './pages/ForgotPassword';
 import Home from './pages/Home';
 import Search from './pages/Search';
 import Categories from './pages/Categories';
 import Equipment from './pages/Equipment';
 import History from './pages/History';
+import Favorites from './pages/Favorites';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import Inventory from './pages/Inventory';
 import Carte from './pages/Carte';
-import Notifications from './pages/Notifications';
 import EditEquipment from './pages/EditEquipment';
 
 // --- LE GARDIEN (PrivateRoute) ---
@@ -44,6 +45,7 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
 
         {/* --- ROUTES PROTÉGÉES (Nécessitent une connexion) --- */}
         {/* On enveloppe chaque page dans <PrivateRoute> */}
@@ -68,16 +70,16 @@ function App() {
           <PrivateRoute><Carte /></PrivateRoute>
         } />
 
+        <Route path="/favorites" element={
+          <PrivateRoute><Favorites /></PrivateRoute>
+        } />
+
         <Route path="/history" element={
           <PrivateRoute><History /></PrivateRoute>
         } />
 
         <Route path="/profile" element={
           <PrivateRoute><Profile /></PrivateRoute>
-        } />
-
-        <Route path="/notifications" element={
-          <PrivateRoute><Notifications /></PrivateRoute>
         } />
 
         {/* Routes Admin (Protégées aussi) */}

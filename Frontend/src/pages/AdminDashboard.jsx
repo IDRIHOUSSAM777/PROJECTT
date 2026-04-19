@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import api from '../services/api';
 
-export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
+export default function AdminDashboard({ onAddEquipementClick }) {
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
     const [modal, setModal] = useState({ isOpen: false, title: '', data: [] });
-    const [activeView, setActiveView] = useState('main'); // 'main' | 'analytics'
+    const [selectedFloor, setSelectedFloor] = useState(null);
     const navigate = useNavigate();
 
     const openModal = (title, data) => setModal({ isOpen: true, title, data });
@@ -53,69 +53,24 @@ export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
         return <div className="flex justify-center items-center h-64 text-red-500 font-medium">Erreur lors du chargement des analytiques.</div>;
     }
 
-    // =========================================================
-    // VUE 1 : ANALYSE DES RÉSERVATIONS (DRILL-DOWN)
-    // =========================================================
-    if (activeView === 'analytics') {
-        return (
-            <div className="animate-fade-in fade-in" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                {/* Header Back Button */}
-                <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-                    <button onClick={() => setActiveView('main')} style={{ background: 'white', border: '1px solid #e5e7eb', padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)', transition: 'all 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-                        <i className="fa-solid fa-arrow-left"></i> Dashboard
-                    </button>
-                    <h2 style={{ fontSize: '24px', fontWeight: '900', color: '#1f2937', margin: '0 0 0 20px' }}>Analyse des Réservations <span style={{ color: '#6b7280', fontWeight: 'normal', fontSize: '16px' }}>(30 derniers jours)</span></h2>
-                </div>
+    const activeFloors = stats ? [...new Set(stats.charts.room_bars.map(r => String(r.etage)))].filter(f => f !== '-').map(Number) : [];
+    const maxFloor = activeFloors.length > 0 ? Math.max(...activeFloors) : 0;
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px' }}>
-                    {/* Bar Chart Horizontal pour le Top 10 */}
-                    <div style={{ background: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e5e7eb' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginBottom: '16px', margin: 0 }}><i className="fa-solid fa-ranking-star mr-2 text-yellow-500"></i> Classement Top 10</h3>
-                        <div style={{ height: '400px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={stats.events.top_10_mensuel} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-                                    <XAxis type="number" hide />
-                                    <YAxis type="category" dataKey="modele" tick={{ fontSize: 13, fontWeight: 'bold', fill: '#4b5563' }} axisLine={false} tickLine={false} />
-                                    <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} />
-                                    <Bar dataKey="reservations" fill="#a855f7" radius={[0, 6, 6, 0]} barSize={24}>
-                                        {
-                                            stats.events.top_10_mensuel.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={index === 0 ? '#ca8a04' : index === 1 ? '#9ca3af' : index === 2 ? '#b45309' : '#a855f7'} />
-                                            ))
-                                        }
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-
-                    {/* Line Chart Tendance */}
-                    <div style={{ background: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e5e7eb' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginBottom: '16px', margin: 0 }}><i className="fa-solid fa-chart-line mr-2 text-blue-500"></i> Tendance temporelle</h3>
-                        <div style={{ height: '400px', marginTop: '10px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <LineChart data={stats.charts.reservation_trend} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                                    <XAxis dataKey="date" tick={{ fontSize: 13, fill: '#6b7280' }} axisLine={false} tickLine={false} tickFormatter={(val) => new Date(val).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} />
-                                    <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#6b7280', fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} labelFormatter={(label) => new Date(label).toLocaleDateString()} />
-                                    <Line type="monotone" dataKey="count" name="Réservations" stroke="#3b82f6" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                                </LineChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
+    const floors = [];
+    for (let i = 0; i <= maxFloor; i++) {
+        floors.push(i);
     }
 
-    // =========================================================
-    // VUE 0 : MAIN DASHBOARD
-    // =========================================================
+    const effectiveFloor = selectedFloor !== null ? selectedFloor : (floors.length > 0 ? floors[0] : 0);
+
+    const filteredRoomBars = stats
+        ? stats.charts.room_bars.filter(r => String(r.etage) === String(effectiveFloor))
+        : [];
+
     return (
         <div className="space-y-6 animate-fade-in fade-in" style={{ animation: 'fadeIn 0.4s ease-out' }}>
             {/* COUCHE 1 : CARTES KPI */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px' }}>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '16px' }}>
                 <div onClick={() => openModal('Tous les Utilisateurs', stats.details.users)} style={{ cursor: 'pointer', background: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                     <div>
                         <p style={{ fontSize: '11px', color: '#6b7280', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Utilisateurs</p>
@@ -161,14 +116,41 @@ export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
                         <i className="fa-solid fa-triangle-exclamation"></i>
                     </div>
                 </div>
-                {/* 6ème Carte : Top Réservations (Couleur Violet/Gold) */}
-                <div onClick={() => setActiveView('analytics')} style={{ cursor: 'pointer', background: 'linear-gradient(135deg, #fdf4ff 0%, #f3e8ff 100%)', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e9d5ff', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'transform 0.2s' }} onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
+                <div
+                    onClick={() => openModal('Équipements en Quarantaine', stats.details.equipments.filter(e => String(e.statut).toLowerCase().includes('quarantaine')))}
+                    style={{ cursor: 'pointer', background: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', borderLeft: '4px solid #7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'transform 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    title="Objets placés en quarantaine par les détecteurs cybersécurité"
+                >
                     <div>
-                        <p style={{ fontSize: '11px', color: '#9333ea', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Top Réservations</p>
-                        <p style={{ fontSize: '24px', fontWeight: '900', color: '#7e22ce', margin: '4px 0 0 0' }}>{stats.events.top_10_mensuel ? stats.events.top_10_mensuel.length : 0}</p>
+                        <p style={{ fontSize: '11px', color: '#6d28d9', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Quarantaine</p>
+                        <p style={{ fontSize: '24px', fontWeight: '900', color: '#1f2937', margin: '4px 0 0 0' }}>{stats.kpi.quarantine_count ?? 0}</p>
                     </div>
-                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ffffff', color: '#9333ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
-                        <i className="fa-solid fa-trophy text-yellow-500"></i>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#ede9fe', color: '#6d28d9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>
+                        <i className="fa-solid fa-shield-halved"></i>
+                    </div>
+                </div>
+                <div
+                    onClick={() => openModal('Alertes Cybersécurité Actives', (stats.security?.active_alerts || []).map(a => ({
+                        id: a.id,
+                        marque: `Alerte #${a.id}`,
+                        modele: a.message,
+                        statut: a.niveau,
+                        mac: a.id_objet ? `Objet ${a.id_objet}` : '—',
+                        ip: a.date_alerte || '',
+                    })))}
+                    style={{ cursor: 'pointer', background: 'white', padding: '20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', borderLeft: '4px solid #b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'transform 0.2s' }}
+                    onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                    onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                    title="Alertes cybersécurité non résolues"
+                >
+                    <div>
+                        <p style={{ fontSize: '11px', color: '#991b1b', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Alertes Sécurité</p>
+                        <p style={{ fontSize: '24px', fontWeight: '900', color: '#1f2937', margin: '4px 0 0 0' }}>{stats.kpi.security_alerts_active ?? 0}</p>
+                    </div>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#fee2e2', color: '#b91c1c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>
+                        <i className="fa-solid fa-user-secret"></i>
                     </div>
                 </div>
             </div>
@@ -204,73 +186,83 @@ export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
                 {/* Graphique Salles (BarChart) */}
                 <div style={{ background: 'white', padding: '24px', borderRadius: '16px', border: '1px solid #e5e7eb', gridColumn: 'span 2' }}>
                     <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#1f2937', marginBottom: '16px', margin: 0 }}>Équipements par salle</h3>
-                    <div style={{ height: '320px', marginTop: '20px' }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stats.charts.room_bars} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                                <XAxis dataKey="salle" tick={false} axisLine={false} tickLine={false} />
-                                <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#6b7280', fontWeight: 'bold' }} axisLine={false} tickLine={false} />
-                                <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f3f4f6' }} />
-                                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={45} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                    <div style={{ height: '320px', marginTop: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {filteredRoomBars.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={filteredRoomBars} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                    <XAxis dataKey="salle" tick={false} axisLine={false} tickLine={false} />
+                                    <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#6b7280', fontWeight: 'bold' }} axisLine={false} tickLine={false} />
+                                    <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f3f4f6' }} />
+                                    <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} barSize={45} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <p style={{ color: '#9ca3af', fontWeight: 'bold', fontSize: '15px' }}>Aucun équipement ou salle dans cet étage.</p>
+                        )}
+                    </div>
+                    {/* Floor Selector Controls */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '16px', gap: '12px' }}>
+                        <span style={{ fontSize: '16px', fontWeight: '900', color: '#111827' }}>Sélectionner un étage :</span>
+                        <select
+                            value={effectiveFloor}
+                            onChange={(e) => setSelectedFloor(e.target.value)}
+                            style={{
+                                padding: '6px 16px',
+                                borderRadius: '8px',
+                                border: '2px solid #1d4ed8',
+                                background: 'white',
+                                color: '#1f2937',
+                                fontWeight: 'bold',
+                                fontSize: '15px',
+                                outline: 'none',
+                                cursor: 'pointer',
+                                transition: 'border-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.target.style.borderColor = '#2563eb'}
+                            onMouseLeave={(e) => e.target.style.borderColor = '#1d4ed8'}
+                        >
+                            {floors.map(floor => (
+                                <option key={floor} value={floor}>Étage {floor}</option>
+                            ))}
+                        </select>
                     </div>
                 </div>
             </div>
 
-            {/* COUCHE 3 : ÉVÉNEMENTS EN DIRECT (LISTES RÉDUITES SANS TOP 10) */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '24px', marginTop: '24px' }}>
+            {/* COUCHE 3 : TOP FAVORIS (pleine largeur) */}
+            <div style={{ marginTop: '24px' }}>
 
-                {/* Liste : Alertes Actives */}
-                <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #fecaca', overflow: 'hidden' }}>
-                    <div style={{ background: '#fef2f2', padding: '16px 24px', borderBottom: '1px solid #fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#991b1b', margin: 0 }}><i className="fa-solid fa-triangle-exclamation mr-2"></i> Alertes à traiter</h3>
-                        <span style={{ background: '#dc2626', color: 'white', fontSize: '12px', fontWeight: 'bold', padding: '4px 12px', borderRadius: '999px' }}>{stats.events.active_alerts.length}</span>
+                {/* Liste : Équipements les plus aimés */}
+                <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #fde68a', overflow: 'hidden' }}>
+                    <div style={{ background: '#fffcf0', padding: '16px 24px', borderBottom: '1px solid #fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#92400e', margin: 0 }}><i className="fa-solid fa-star mr-2"></i> Les plus populaires</h3>
+                        <span style={{ background: '#f59e0b', color: 'white', fontSize: '12px', fontWeight: 'bold', padding: '4px 12px', borderRadius: '999px' }}>TOP 10</span>
                     </div>
                     <div>
-                        {stats.events.active_alerts.length > 0 ? (
+                        {stats.events.popular_items && stats.events.popular_items.length > 0 ? (
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                                {stats.events.active_alerts.map((alert, i) => (
-                                    <li key={i} style={{ padding: '20px 24px', display: 'flex', alignItems: 'flex-start', gap: '16px', borderBottom: '1px solid #f3f4f6' }}>
-                                        <div style={{ width: '10px', height: '10px', marginTop: '6px', borderRadius: '50%', background: '#ef4444' }}></div>
-                                        <div>
-                                            <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{alert.message}</p>
-                                            <p style={{ fontSize: '13px', fontWeight: '500', color: '#6b7280', margin: '4px 0 0 0' }}>{new Date(alert.date).toLocaleString()} • Gravité : <span style={{ color: '#dc2626' }}>{alert.niveau}</span></p>
+                                {stats.events.popular_items.map((item, i) => (
+                                    <li key={i} onClick={() => navigate(`/equipment/${item.id}`)} style={{ padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', borderBottom: '1px solid #f3f4f6', cursor: 'pointer', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fffbeb', color: '#f59e0b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '18px' }}>
+                                                {i + 1}
+                                            </div>
+                                            <div>
+                                                <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{item.marque} {item.modele}</p>
+                                                <p style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>{item.count} utilisateur{item.count > 1 ? 's ont' : ' a'} épinglé cet objet</p>
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#f59e0b', fontWeight: 'bold' }}>
+                                            {item.count} <i className="fa-solid fa-star"></i>
                                         </div>
                                     </li>
                                 ))}
                             </ul>
                         ) : (
                             <div style={{ padding: '40px', textAlign: 'center' }}>
-                                <i className="fa-solid fa-check-circle" style={{ fontSize: '36px', color: '#4ade80', marginBottom: '12px' }}></i>
-                                <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Aucune alerte en cours</p>
+                                <i className="fa-solid fa-star-half-stroke" style={{ fontSize: '36px', color: '#e5e7eb', marginBottom: '12px' }}></i>
+                                <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#6b7280', margin: 0 }}>Aucun favori enregistré</p>
                             </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Liste : Dernières Réservations */}
-                <div style={{ background: 'white', borderRadius: '16px', border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-                    <div style={{ background: '#f9fafb', padding: '16px 24px', borderBottom: '1px solid #f3f4f6' }}>
-                        <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#1f2937', margin: 0 }}><i className="fa-regular fa-calendar-check mr-2"></i> Dernières Transactions</h3>
-                    </div>
-                    <div>
-                        {stats.events.recent_reservations.length > 0 ? (
-                            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                                {stats.events.recent_reservations.map((res, i) => (
-                                    <li key={i} style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6' }}>
-                                        <div>
-                                            <p style={{ fontSize: '15px', fontWeight: 'bold', color: '#111827', margin: 0 }}>{res.user}</p>
-                                            <p style={{ fontSize: '13px', fontWeight: '500', color: '#6b7280', margin: '4px 0 0 0' }}>Cible : <span style={{ fontWeight: 'bold', color: '#374151' }}>{res.object_model}</span></p>
-                                        </div>
-                                        <div style={{ textAlign: 'right' }}>
-                                            <span style={{ fontSize: '11px', background: '#e0e7ff', color: '#3730a3', padding: '4px 10px', borderRadius: '6px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{res.status}</span>
-                                            <p style={{ fontSize: '12px', fontWeight: '500', color: '#9ca3af', margin: '8px 0 0 0' }}>{new Date(res.date).toLocaleDateString()}</p>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p style={{ padding: '40px', fontSize: '15px', fontWeight: 'bold', color: '#6b7280', textAlign: 'center', margin: 0 }}>Aucune réservation récente.</p>
                         )}
                     </div>
                 </div>
@@ -299,7 +291,6 @@ export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
                                             <tr style={{ color: '#64748b', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #e2e8f0' }}>
                                                 <th style={{ padding: '0 12px 12px 12px' }}>Nom Complet</th>
                                                 <th style={{ padding: '0 12px 12px 12px' }}>Email</th>
-                                                <th style={{ padding: '0 12px 12px 12px' }}>Rôle</th>
                                             </tr>
                                         ) : (
                                             <tr style={{ color: '#64748b', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '2px solid #e2e8f0' }}>
@@ -315,7 +306,6 @@ export default function AdminDashboard({ onAddEquipementClick, onGoToAlerts }) {
                                                 <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                                                     <td style={{ padding: '16px 12px', fontWeight: 'bold', color: '#0f172a' }}>{item.nom} {item.prenom}</td>
                                                     <td style={{ padding: '16px 12px', color: '#475569' }}>{item.email}</td>
-                                                    <td style={{ padding: '16px 12px' }}><span style={{ padding: '4px 10px', background: '#f1f5f9', color: '#334155', borderRadius: '6px', fontSize: '12px', fontWeight: 'bold' }}>{item.role}</span></td>
                                                 </tr>
                                             ) : (
                                                 <tr key={i} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s', cursor: 'pointer' }} onClick={() => navigate(`/equipment/${item.id}`)} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>

@@ -17,3 +17,19 @@ Backend/*.sqlite3
 *.log
 **/__pycache__/
 *.pyc
+
+# Claude local session data
+.claude/
+
+# Dev scratch files (not part of the app)
+Backend/out*.txt
+Backend/sql_output.txt
+Backend/req_test*.py
+Backend/req_put.py
+Backend/test_db*.py
+Backend/test_sql*.py
+Backend/test_nlp.py
+Backend/test_search.py
+Backend/test_pipeline.py
+Backend/test_extraction.py
+Backend/migration.py

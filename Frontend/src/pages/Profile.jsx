@@ -136,7 +136,7 @@ const Profile = () => {
             <div className="pf-avatar">{avatarText.toUpperCase()}</div>
             <div>
               <div className="pf-name">{user.nom} {user.prenom}</div>
-              <div className="pf-role"><i className="fa-solid fa-shield-halved" /> {translateData('role', user.role)}</div>
+              <div className="pf-role"><i className="fa-solid fa-shield-halved" /> {translateData('role', user.email === 'admin@smartfind.com' ? 'Admin' : 'Utilisateur')}</div>
               <div className="pf-meta"><span className="pill">{user.email}</span></div>
             </div>
           </div>

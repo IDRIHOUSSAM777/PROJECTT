@@ -6,11 +6,8 @@ from data import models
 from data import schemas
 import auth
 from data.database import get_db
-from routers.notifications import create_notification
 
 router = APIRouter(tags=["Gestion des Alertes (Admin)"])
-
-OPEN_RESERVATION_STATUSES = ["ACTIVE", "Active", "WAITING", "Waiting"]
 
 @router.get("/admin/alertes", response_model=List[schemas.AlerteResponse])
 def get_alertes(resolved: bool = False, db: Session = Depends(get_db), current_user: models.Utilisateur = Depends(auth.get_current_admin)):
@@ -34,7 +31,8 @@ def get_alertes(resolved: bool = False, db: Session = Depends(get_db), current_u
             "date_alerte": a.date_alerte,
             "est_resolu": a.est_resolu,
             "nom_objet": nom_objet,
-            "nom_signaleur": signaleur
+            "nom_signaleur": signaleur,
+            "id_objet": a.id_objet,
         })
     return response
 
@@ -49,56 +47,74 @@ def resolve_alerte(
     if not alerte: raise HTTPException(404, "Alerte introuvable")
     
     alerte.est_resolu = True
-    
+
     if alerte.objet:
         alerte.objet.statut = nouveau_statut_objet
-        
+
         if nouveau_statut_objet == "Disponible":
-             pass 
+             pass
         elif nouveau_statut_objet == "Panne":
              alerte.objet.description = f"EN PANNE (Confirmé par Admin via alerte #{alerte_id})"
-             
-             reservations_affectees = db.query(models.Reservation).filter(
-                 models.Reservation.id_objet == alerte.objet.id_objet,
-                 models.Reservation.statut_reservation.in_(OPEN_RESERVATION_STATUSES)
-             ).all()
-             
-             for res in reservations_affectees:
-                 create_notification(
-                     db=db,
-                     user_id=res.id_utilisateur,
-                     message=f"L'objet {alerte.objet.nom_model} (Réservation #{res.id}) vient d'être déclaré en PANNE.",
-                     type_notification="PANNE_ALERTE",
-                     object_id=alerte.objet.id_objet,
-                     reservation_id=res.id
-                 )
 
     db.commit()
+
+    if alerte.objet:
+        from data.redis_client import clear_search_cache, publish_status_change
+        clear_search_cache()
+        publish_status_change(alerte.objet.id_objet, nouveau_statut_objet, source="admin_resolve", extra={"alerte_id": alerte_id})
+
     return {"message": f"Alerte résolue. L'objet est maintenant '{nouveau_statut_objet}'"}
+
+
+@router.delete("/admin/alertes/{alerte_id}")
+def delete_alerte(
+    alerte_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Utilisateur = Depends(auth.get_current_admin),
+):
+    alerte = db.query(models.Alerte).filter(models.Alerte.id_alerte == alerte_id).first()
+    if not alerte:
+        raise HTTPException(404, "Alerte introuvable")
+    db.delete(alerte)
+    db.commit()
+    return {"message": "Alerte supprimée"}
 
 
 @router.post("/objets/{objet_id}/report")
 def signaler_probleme(
-    objet_id: int, 
-    description: str, 
-    current_user: models.Utilisateur = Depends(auth.get_current_user), 
+    objet_id: int,
+    description: str = Body(..., embed=True),
+    current_user: models.Utilisateur = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     objet = db.query(models.Objet).filter(models.Objet.id_objet == objet_id).first()
     if not objet: raise HTTPException(404, "Objet introuvable")
-    
+
+    description = (description or "").strip()
+    if not description:
+        raise HTTPException(400, "Description requise")
+
     if objet.statut != "Panne":
-        objet.statut = "Signalé" 
-    
+        objet.statut = "Signalé"
+
+    print(f"📩 [REPORT] Nouveau signalement pour l'objet {objet_id}: {description}")
+    id_utilisateur_db = current_user.id_utilisateur if current_user.id_utilisateur != 0 else None
+
     new_alerte = models.Alerte(
         message=description,
         niveau="Warning",
         source="Utilisateur",
         id_objet=objet_id,
-        id_utilisateur=current_user.id_utilisateur
+        id_utilisateur=id_utilisateur_db
     )
-    
+
     db.add(new_alerte)
     db.commit()
-    
+    print(f"✅ [REPORT] Alerte #{new_alerte.id_alerte} enregistrée en BDD.")
+
+    # Invalidation du cache (le statut a changé) + publication temps réel
+    from data.redis_client import clear_search_cache, publish_status_change
+    clear_search_cache()
+    publish_status_change(objet_id, objet.statut, source="report")
+
     return {"message": "Problème signalé. L'objet est en attente de vérification."}

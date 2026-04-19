@@ -13,7 +13,7 @@ const EditEquipment = () => {
     const [types, setTypes] = useState([]);
     const [fonctionnalitesDispo, setFonctionnalitesDispo] = useState([]);
     const [formData, setFormData] = useState({
-        nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: '', statut: ''
+        nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: '', statut: '', supports_wol: false
     });
 
     useEffect(() => {
@@ -48,7 +48,8 @@ const EditEquipment = () => {
                     pos_y: eq.pos_y,
                     photo: null,
                     statut: eq.statut || '',
-                    fonctionnalites: eq.fonctionnalites ? eq.fonctionnalites.map(f => f.nom).join(', ') : ''
+                    fonctionnalites: eq.fonctionnalites ? eq.fonctionnalites.map(f => f.nom || f).join(', ') : '',
+                    supports_wol: !!eq.supports_wol,
                 });
                 setLoading(false);
             } catch (err) {
@@ -85,7 +86,8 @@ const EditEquipment = () => {
                 pos_x: formData.pos_x,
                 pos_y: formData.pos_y,
                 statut: formData.statut,
-                fonctionnalites: fonctionnalitesList
+                fonctionnalites: fonctionnalitesList,
+                supports_wol: formData.supports_wol,
             };
 
             await api.put(`/objets/${id}`, payload);
@@ -143,6 +145,23 @@ const EditEquipment = () => {
 
                             <input required type="text" placeholder="Adresse MAC (Obligatoire)" className="input" value={formData.mac_adresse} onChange={e => setFormData({ ...formData, mac_adresse: e.target.value })} />
                             <input type="text" placeholder="Adresse IP" className="input" value={formData.ip_adress} onChange={e => setFormData({ ...formData, ip_adress: e.target.value })} />
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', background: formData.supports_wol ? '#fef3c7' : '#f8fafc', cursor: 'pointer' }}>
+                                <input
+                                    type="checkbox"
+                                    checked={formData.supports_wol}
+                                    onChange={e => setFormData({ ...formData, supports_wol: e.target.checked })}
+                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                />
+                                <span style={{ display: 'flex', flexDirection: 'column' }}>
+                                    <strong style={{ fontSize: '0.9rem' }}>
+                                        <i className="fa-solid fa-power-off" style={{ color: '#f59e0b', marginRight: 6 }} />
+                                        Supporte le Wake-on-LAN (WoL)
+                                    </strong>
+                                    <small style={{ color: '#6b7280' }}>
+                                        Active le bouton « Réveiller » côté utilisateur (envoi d'un Magic Packet sur la MAC).
+                                    </small>
+                                </span>
+                            </label>
                             <div>
                                 <input list="fonc-list" placeholder="Fonctionnalités (séparées par des virgules)" className="input" style={{ width: '100%' }} value={formData.fonctionnalites} onChange={e => setFormData({ ...formData, fonctionnalites: e.target.value })} />
                                 <datalist id="fonc-list">
@@ -201,7 +220,7 @@ const EditEquipment = () => {
                         </div>
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '15px', marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
-                            <button type="submit" className="btn btn-primary" style={{ background: 'var(--primary)', color: 'white', padding: '15px 35px', fontSize: '1.1rem' }} disabled={!formData.id_salle || formData.pos_x === null}>
+                            <button type="submit" className="btn btn-primary" style={{ background: 'var(--primary)', color: 'white', padding: '15px 35px', fontSize: '1.1rem' }}>
                                 Mettre à jour l'équipement <i className="fa-solid fa-check" style={{ marginLeft: '8px' }}></i>
                             </button>
                         </div>
