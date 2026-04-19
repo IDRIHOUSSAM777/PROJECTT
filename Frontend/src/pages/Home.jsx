@@ -12,9 +12,17 @@ const defaultFilters = {
   salle: '',
 };
 
+const getStatusClass = (status) => {
+  const lower = String(status || '').toLowerCase();
+  if (lower.includes('disponible') || lower.includes('available')) return 'ok';
+  if (lower.includes('panne') || lower.includes('out of order') || lower.includes('aver')) return 'busy';
+  return 'warning';
+};
+
 const Home = () => {
-  const { t, translateData } = useI18n();
+  const { t, translateData, language } = useI18n();
   const [query, setQuery] = useState('');
+  const [recommendations, setRecommendations] = useState([]);
   const [categories, setCategories] = useState([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
@@ -39,6 +47,14 @@ const Home = () => {
     api.get('/categories')
       .then((res) => setCategories(Array.isArray(res.data) ? res.data : []))
       .catch(() => setCategories([]));
+  }, []);
+
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) return;
+    api
+      .get('/users/me/recommendations', { params: { limit: 4 } })
+      .then((res) => setRecommendations(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setRecommendations([]));
   }, []);
 
   useEffect(() => {
@@ -379,6 +395,42 @@ const Home = () => {
           </div>
 
         </section>
+
+        {recommendations.length > 0 && (
+          <section className="recommendations" style={{ marginBottom: 20 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <i className="fa-solid fa-sparkles" style={{ color: 'var(--primary)' }} />
+              {language === 'ar' ? 'مقترح لك' : language === 'en' ? 'For you' : language === 'es' ? 'Para ti' : 'Pour vous'}
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+              {recommendations.map((r) => (
+                <article
+                  key={r.id_objet}
+                  className="card reco-card"
+                  onClick={() => navigate(`/equipment/${r.id_objet}`)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 14, cursor: 'pointer', gap: 8 }}
+                >
+                  {r.url_photo ? (
+                    <img
+                      src={`http://127.0.0.1:8000${r.url_photo}`}
+                      alt={r.nom_model}
+                      style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
+                    />
+                  ) : (
+                    <div style={{ width: 64, height: 64, background: 'var(--surface-2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                      <i className={`fa-solid ${getIcon(r.type_objet)}`} style={{ fontSize: 26 }} />
+                    </div>
+                  )}
+                  <div style={{ fontWeight: 600, fontSize: 14, textAlign: 'center' }}>{r.nom_model}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-soft)', textAlign: 'center' }}>
+                    {translateData('type', r.type_objet)} · {r.nom_marque}
+                  </div>
+                  <span className={`badge ${getStatusClass(r.statut)}`}>{translateData('status', r.statut)}</span>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="quick">
           <div className="quick-head">

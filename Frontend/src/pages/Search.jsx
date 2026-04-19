@@ -100,7 +100,6 @@ const Search = () => {
   const [loading, setLoading] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const [recommendations, setRecommendations] = useState([]);
 
   const [suggestions, setSuggestions] = useState([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -193,14 +192,6 @@ const Search = () => {
     setQuery(params.get('q') || '');
     setFilters(filtersFromParams(params));
   }, [params]);
-
-  useEffect(() => {
-    if (!localStorage.getItem('access_token')) return;
-    api
-      .get('/users/me/recommendations', { params: { limit: 4 } })
-      .then((res) => setRecommendations(Array.isArray(res.data) ? res.data : []))
-      .catch(() => setRecommendations([]));
-  }, []);
 
   useEffect(() => {
     const shouldSave = params.get('save') === '1';
@@ -567,42 +558,6 @@ const Search = () => {
         )}
 
 
-
-        {!query.trim() && recommendations.length > 0 && (
-          <section className="recommendations" style={{ marginBottom: 20 }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <i className="fa-solid fa-sparkles" style={{ color: 'var(--primary)' }} />
-              {locale === 'ar' ? 'مقترح لك' : locale === 'en' ? 'For you' : locale === 'es' ? 'Para ti' : 'Pour vous'}
-            </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-              {recommendations.map((r) => (
-                <article
-                  key={r.id_objet}
-                  className="card reco-card"
-                  onClick={() => navigate(`/equipment/${r.id_objet}`)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: 14, cursor: 'pointer', gap: 8 }}
-                >
-                  {r.url_photo ? (
-                    <img
-                      src={`http://127.0.0.1:8000${r.url_photo}`}
-                      alt={r.nom_model}
-                      style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--border)' }}
-                    />
-                  ) : (
-                    <div style={{ width: 64, height: 64, background: 'var(--surface-2)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
-                      <i className={`fa-solid ${getIcon(r.type_objet)}`} style={{ fontSize: 26 }} />
-                    </div>
-                  )}
-                  <div style={{ fontWeight: 600, fontSize: 14, textAlign: 'center' }}>{r.nom_model}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-soft)', textAlign: 'center' }}>
-                    {translateData('type', r.type_objet)} · {r.nom_marque}
-                  </div>
-                  <span className={`badge ${getStatusClass(r.statut)}`}>{translateData('status', r.statut)}</span>
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
 
         <div className="found">
           <span>{loading ? t('search.searching') : `${results.length} ${t('search.results')}`}</span>
