@@ -15,8 +15,7 @@
             "داتاشو",
             "داتا شو",
             "عارض",
-            "عارض ضوئي",
-            "proyector"
+            "عارض ضوئي"
         ],
         "Ordinateur": [
             "pc",
@@ -39,10 +38,7 @@
             "كمبيوتر",
             "بيسي",
             "لابتوب",
-            "ميكرو",
-            "computadora",
-            "ordenador",
-            "portátil"
+            "ميكرو"
         ],
         "Imprimante": [
             "imprimante",
@@ -65,9 +61,7 @@
             "طابعة",
             "مطبعة",
             "آلة طباعة",
-            "ناسخة",
-            "impresora",
-            "copiadora"
+            "ناسخة"
         ],
         "Scanner": [
             "scan",
@@ -80,9 +74,7 @@
             "imprimante multifonction",
             "ماسح",
             "ماسح ضوئي",
-            "سكانر",
-            "escáner",
-            "digitalizador"
+            "سكانر"
         ],
         "Routeur": [
             "routeur",
@@ -109,9 +101,7 @@
             "ويفي",
             "واي فاي",
             "انترنت",
-            "شبكة",
-            "enrutador",
-            "conmutador"
+            "شبكة"
         ],
         "Climatiseur": [
             "climatiseur",
@@ -126,9 +116,7 @@
             "مكيف",
             "مكيفة",
             "تكييف",
-            "كليم",
-            "aire acondicionado",
-            "climatizador"
+            "كليم"
         ],
         "Tableau": [
             "tableau",
@@ -145,9 +133,7 @@
             "سبورة ذكية",
             "لوح",
             "لوحة",
-            "طابلو",
-            "pizarra",
-            "pizarra digital"
+            "طابلو"
         ],
         "Serveur": [
             "serveur",
@@ -164,8 +150,7 @@
             "سيرفر",
             "خادم",
             "خادوم",
-            "مخدم",
-            "servidor"
+            "مخدم"
         ],
         "Camera": [
             "camera",
@@ -178,9 +163,7 @@
             "dvr",
             "nvr",
             "كاميرا",
-            "كاميرا مراقبة",
-            "cámara",
-            "cámara de seguridad"
+            "كاميرا مراقبة"
         ],
         "Telephone": [
             "telephone",
@@ -193,9 +176,7 @@
             "combiné",
             "هاتف",
             "تليفون",
-            "هاتف ذكي",
-            "teléfono",
-            "móvil"
+            "هاتف ذكي"
         ],
         "Capteur de température": [
             "capteur",
@@ -212,9 +193,7 @@
             "حساس",
             "مستشعر",
             "حساس حرارة",
-            "مجس حراري",
-            "sensor de temperatura",
-            "termómetro"
+            "مجس حراري"
         ]
     },
     "TYPE_INTENT_PATTERNS": {
@@ -229,9 +208,7 @@
             "print\\s+(a|the)?\\s*(document|paper|file)",
             "يطبع",
             "طباعة",
-            "نسخة\\s+ورقية",
-            "imprimir",
-            "copiar"
+            "نسخة\\s+ورقية"
         ],
         "Projecteur": [
             "\\bprojeter\\b",
@@ -242,9 +219,7 @@
             "\\bprojecting\\b",
             "\\bshow\\s+(slides|a\\s+presentation)",
             "عرض",
-            "يعرض",
-            "presentar",
-            "proyectar"
+            "يعرض"
         ],
         "Scanner": [
             "\\bscanner\\b",
@@ -252,8 +227,7 @@
             "\\bscan\\b",
             "scanning",
             "يسكاني",
-            "مسح\\s+ضوئي",
-            "escanear"
+            "مسح\\s+ضوئي"
         ],
         "Routeur": [
             "\\bconnexion\\b",
@@ -264,16 +238,14 @@
             "no\\s+internet",
             "aucune\\s+connexion",
             "اتصال",
-            "شبكة",
-            "conexión"
+            "شبكة"
         ],
         "Ordinateur": [
             "j['e]?\\s*ai\\s+besoin\\s+d['e ]?un\\s+(pc|ordinateur|ordi)",
             "travailler\\s+sur\\s+un\\s+(pc|ordinateur)",
             "need\\s+(a\\s+)?(pc|computer|laptop)",
             "use\\s+(a\\s+)?(pc|computer)",
-            "احتاج\\s+(حاسوب|كمبيوتر|لابتوب)",
-            "necesito\\s+(una\\s+)?(pc|computadora)"
+            "احتاج\\s+(حاسوب|كمبيوتر|لابتوب)"
         ],
         "Climatiseur": [
             "il\\s+fait\\s+chaud",
@@ -308,8 +280,7 @@
             "double sided",
             "duplex",
             "two sided",
-            "على الوجهين",
-            "doble cara"
+            "على الوجهين"
         ],
         "couleur": [
             "color",
@@ -318,8 +289,7 @@
             "coloré",
             "multicolore",
             "ملون",
-            "بالألوان",
-            "a color"
+            "بالألوان"
         ],
         "noir et blanc": [
             "noir blanc",
@@ -328,8 +298,7 @@
             "black and white",
             "b&w",
             "monochrome",
-            "أبيض وأسود",
-            "blanco y negro"
+            "أبيض وأسود"
         ],
         "a4": [
             "format a4",
@@ -344,36 +313,33 @@
             "sans fil",
             "wireless",
             "واي فاي",
-            "ويفي",
-            "inalámbrico"
+            "ويفي"
         ],
         "rapide": [
             "haute vitesse",
             "high speed",
             "fast",
-            "سريع",
-            "rápido"
+            "سريع"
         ]
     },
     "LANGUAGE_SYNONYMS": {
-        "imprimante": ["printer", "imprimante", "طابعة", "impresora"],
-        "scanner": ["scanner", "scan", "ماسح ضوئي", "سكانر", "escáner"],
-        "ordinateur": ["computer", "pc", "laptop", "ordinateur", "حاسوب", "كمبيوتر", "computadora", "ordenador"],
-        "projecteur": ["projector", "beamer", "projecteur", "بروجكتور", "proyector"],
-        "routeur": ["router", "routeur", "راوتر", "موجه", "enrutador"],
-        "wifi": ["wifi", "wi-fi", "wireless", "واي فاي", "inalámbrico"],
-        "serveur": ["server", "serveur", "خادم", "سيرفر", "servidor"],
-        "camera": ["camera", "webcam", "caméra", "كاميرا", "cámara"],
-        "telephone": ["phone", "telephone", "téléphone", "هاتف", "teléfono"],
-        "climatiseur": ["ac", "air conditioner", "climatiseur", "clim", "مكيف", "aire acondicionado"],
-        "tableau": ["whiteboard", "board", "tableau", "سبورة", "pizarra"],
-        "capteur": ["sensor", "capteur", "حساس", "مستشعر", "sensor"],
-        "disponible": ["available", "free", "disponible", "متاح", "فارغ", "libre"],
-        "occupe": ["busy", "reserved", "occupe", "occupé", "مشغول", "محجوز", "ocupado"],
-        "panne": ["broken", "down", "panne", "معطل", "averiado"],
-        "salle": ["room", "salle", "قاعة", "غرفة", "sala"],
-        "etage": ["floor", "level", "etage", "étage", "طابق", "piso"],
-        "couleur": ["color", "colour", "couleur", "ملون", "a color"],
+        "imprimante": ["printer", "imprimante", "طابعة"],
+        "scanner": ["scanner", "scan", "ماسح ضوئي", "سكانر"],
+        "ordinateur": ["computer", "pc", "laptop", "ordinateur", "حاسوب", "كمبيوتر"],
+        "projecteur": ["projector", "beamer", "projecteur", "بروجكتور"],
+        "routeur": ["router", "routeur", "راوتر", "موجه"],
+        "wifi": ["wifi", "wi-fi", "wireless", "واي فاي"],
+        "serveur": ["server", "serveur", "خادم", "سيرفر"],
+        "camera": ["camera", "webcam", "caméra", "كاميرا"],
+        "telephone": ["phone", "telephone", "téléphone", "هاتف"],
+        "climatiseur": ["ac", "air conditioner", "climatiseur", "clim", "مكيف"],
+        "tableau": ["whiteboard", "board", "tableau", "سبورة"],
+        "capteur": ["sensor", "capteur", "حساس", "مستشعر"],
+        "disponible": ["available", "free", "disponible", "متاح", "فارغ"],
+        "occupe": ["busy", "reserved", "occupe", "occupé", "مشغول", "محجوز"],
+        "panne": ["broken", "down", "panne", "معطل"],
+        "salle": ["room", "salle", "قاعة", "غرفة"],
+        "couleur": ["color", "colour", "couleur", "ملون"],
         "recto-verso": ["duplex", "double sided", "recto verso", "recto-verso", "على الوجهين"]
     },
     "NOISE_TERMS": [
@@ -450,17 +416,6 @@
         "يوجد",
         "اين",
         "أين",
-        "هنا",
-        "quiero",
-        "busco",
-        "necesito",
-        "encontrar",
-        "el",
-        "los",
-        "las",
-        "y",
-        "o",
-        "por",
-        "favor"
+        "هنا"
     ]
 }

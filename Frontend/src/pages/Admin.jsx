@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../services/api';
 import { useI18n } from '../i18n';
 import AdminDashboard from './AdminDashboard';
 
+const pathToView = (pathname) => {
+  if (pathname.startsWith('/admin/alerts')) return 'alerts';
+  if (pathname.startsWith('/admin/add')) return 'add';
+  return 'dashboard';
+};
+
 const Admin = () => {
   const { t, locale } = useI18n();
   const navigate = useNavigate();
-  const [view, setView] = useState('alerts'); // 'alerts' par défaut, 'dashboard', 'add'
+  const location = useLocation();
+  const view = pathToView(location.pathname);
 
   // Alerts State
   const [alertes, setAlertes] = useState([]);
@@ -15,7 +22,6 @@ const Admin = () => {
   const [selectedAlertId, setSelectedAlertId] = useState(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState(null);
-  const [hasNewAlerts, setHasNewAlerts] = useState(false);
 
   // Add Object State
   const [salles, setSalles] = useState([]);
@@ -28,8 +34,9 @@ const Admin = () => {
   const TYPES_PAR_DEFAUT = ['Ordinateur', 'Imprimante', 'Scanner', 'Projecteur', 'Réseau', 'Contrôle accès', 'Écran', 'Serveur', 'Capteur'];
   const MARQUES_PAR_DEFAUT = ['HP', 'Canon', 'Dell', 'Cisco', 'Epson', 'Lenovo', 'Logitech', 'SAMSUNG', 'ViewSonic'];
   const [formData, setFormData] = useState({
-    nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: ''
+    nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: []
   });
+  const [newFonc, setNewFonc] = useState('');
 
   const fetchAlertes = () => {
     api.get('/admin/alertes').then(res => setAlertes(res.data))
@@ -39,6 +46,14 @@ const Admin = () => {
   useEffect(() => {
     if (view === 'alerts') {
       fetchAlertes();
+      // Marquer toutes les alertes comme vues dès l'ouverture de la page Alerts.
+      // Le badge rouge sur la navbar se met ensuite à zéro au prochain polling.
+      api.post('/admin/alertes/mark_all_read')
+        .then(() => {
+          // Notifier la navbar immédiatement (sans attendre le polling).
+          try { window.dispatchEvent(new CustomEvent('admin:alerts:read')); } catch { /* noop */ }
+        })
+        .catch(() => { /* silencieux */ });
     }
     if (view === 'add') {
       if (salles.length === 0) api.get('/salles').then(res => setSalles(res.data)).catch(() => { });
@@ -72,7 +87,7 @@ const Admin = () => {
             if (data.event === 'subscribed') return;
             setLastEvent(data);
             if (view === 'alerts') fetchAlertes();
-            else setHasNewAlerts(true);
+            try { window.dispatchEvent(new CustomEvent('admin:alerts:new')); } catch { /* noop */ }
           } catch { /* ignore non-JSON */ }
         };
       } catch {
@@ -112,8 +127,8 @@ const Admin = () => {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     try {
-      const fonctionnalitesList = formData.fonctionnalites
-        ? formData.fonctionnalites.split(',').map(f => f.trim()).filter(f => f)
+      const fonctionnalitesList = Array.isArray(formData.fonctionnalites)
+        ? formData.fonctionnalites.map(f => String(f).trim()).filter(f => f)
         : [];
 
       const payload = {
@@ -134,8 +149,9 @@ const Admin = () => {
       }
 
       alert("Équipement ajouté avec succès !");
-      setFormData({ nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: '' });
-      setView('dashboard');
+      setFormData({ nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: [] });
+      setNewFonc('');
+      navigate('/admin/dashboard');
     } catch (err) {
       alert("Erreur lors de l'ajout. Vérifiez l'adresse MAC (unique) ou les champs obligatoires.");
     }
@@ -146,55 +162,35 @@ const Admin = () => {
     <main className="page-pad">
       <div className="container">
 
-        {/* === NAVIGATION BAR === */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '16px 20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e5e7eb', marginBottom: '24px', flexWrap: 'wrap', gap: '15px' }}>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button
-              style={{ display: 'flex', alignItems: 'center', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: view === 'alerts' ? '#2563eb' : 'transparent', color: view === 'alerts' ? 'white' : '#4b5563', position: 'relative' }}
-              onClick={() => { setView('alerts'); setHasNewAlerts(false); }}
-            >
-              <i className="fa-solid fa-bell" style={{ marginRight: '8px' }}></i> Alertes
-              {hasNewAlerts && (
-                <span style={{ position: 'absolute', top: '8px', right: '12px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', border: '2px solid white' }}></span>
-              )}
-            </button>
-            <button
-              style={{ display: 'flex', alignItems: 'center', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: view === 'dashboard' ? '#2563eb' : 'transparent', color: view === 'dashboard' ? 'white' : '#4b5563' }}
-              onClick={() => setView('dashboard')}
-            >
-              <i className="fa-solid fa-chart-pie" style={{ marginRight: '8px' }}></i> Dashboard
-            </button>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span
-              title={wsConnected ? `Temps réel actif${lastEvent ? ` — dernier: objet #${lastEvent.id_objet} → ${lastEvent.statut}` : ''}` : 'Temps réel déconnecté'}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-                padding: '6px 10px', borderRadius: '999px',
-                background: wsConnected ? '#dcfce7' : '#fee2e2',
-                color: wsConnected ? '#166534' : '#991b1b',
-                fontSize: '12px', fontWeight: 'bold',
-              }}
-            >
-              <span style={{
-                width: '8px', height: '8px', borderRadius: '50%',
-                background: wsConnected ? '#16a34a' : '#dc2626',
-                boxShadow: wsConnected ? '0 0 0 3px rgba(22,163,74,0.25)' : 'none',
-              }} />
-              {wsConnected ? 'LIVE' : 'OFFLINE'}
-            </span>
-            <button
-              onClick={() => setView('add')}
-              style={{ display: 'flex', alignItems: 'center', padding: '11px 22px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: view === 'add' ? '#14532d' : '#16a34a', color: 'white', boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)' }}
-            >
-              <i className="fa-solid fa-plus" style={{ marginRight: '8px' }}></i> Ajouter un équipement
-            </button>
-          </div>
+        {/* === BARRE D'OUTILS (LIVE + Ajouter équipement) === */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', background: 'white', padding: '12px 20px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', border: '1px solid #e5e7eb', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+          <span
+            title={wsConnected ? `Temps réel actif${lastEvent ? ` — dernier: objet #${lastEvent.id_objet} → ${lastEvent.statut}` : ''}` : 'Temps réel déconnecté'}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: '6px',
+              padding: '6px 10px', borderRadius: '999px',
+              background: wsConnected ? '#dcfce7' : '#fee2e2',
+              color: wsConnected ? '#166534' : '#991b1b',
+              fontSize: '12px', fontWeight: 'bold',
+            }}
+          >
+            <span style={{
+              width: '8px', height: '8px', borderRadius: '50%',
+              background: wsConnected ? '#16a34a' : '#dc2626',
+              boxShadow: wsConnected ? '0 0 0 3px rgba(22,163,74,0.25)' : 'none',
+            }} />
+            {wsConnected ? 'LIVE' : 'OFFLINE'}
+          </span>
+          <button
+            onClick={() => navigate('/admin/add')}
+            style={{ display: 'flex', alignItems: 'center', padding: '11px 22px', borderRadius: '12px', fontWeight: 'bold', border: 'none', cursor: 'pointer', transition: 'all 0.2s', background: view === 'add' ? '#14532d' : '#16a34a', color: 'white', boxShadow: '0 4px 10px rgba(22, 163, 74, 0.2)' }}
+          >
+            <i className="fa-solid fa-plus" style={{ marginRight: '8px' }}></i> Ajouter un équipement
+          </button>
         </div>
 
         {/* === CONTENU VIEWS === */}
-        {view === 'dashboard' && <AdminDashboard onAddEquipementClick={() => setView('add')} />}
+        {view === 'dashboard' && <AdminDashboard onAddEquipementClick={() => navigate('/admin/add')} />}
 
         {view === 'alerts' && (
           <section className="card admin">
@@ -319,11 +315,94 @@ const Admin = () => {
                 </div>
                 <input required type="text" placeholder="Adresse MAC (Obligatoire)" className="input" value={formData.mac_adresse} onChange={e => setFormData({ ...formData, mac_adresse: e.target.value })} />
                 <input type="text" placeholder="Adresse IP" className="input" value={formData.ip_adress} onChange={e => setFormData({ ...formData, ip_adress: e.target.value })} />
-                <div>
-                  <input list="fonc-list" placeholder="Fonctionnalités (séparées par des virgules)" className="input" style={{ width: '100%' }} value={formData.fonctionnalites} onChange={e => setFormData({ ...formData, fonctionnalites: e.target.value })} />
-                  <datalist id="fonc-list">
-                    {fonctionnalitesDispo.map((f, idx) => <option key={idx} value={f} />)}
-                  </datalist>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 'bold', marginLeft: '4px' }}>Fonctionnalités (cliquez pour sélectionner ; ajoutez-en de nouvelles si besoin)</label>
+                  {fonctionnalitesDispo.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {fonctionnalitesDispo.map((f, idx) => {
+                        const selected = formData.fonctionnalites.includes(f);
+                        return (
+                          <button
+                            type="button"
+                            key={idx}
+                            onClick={() => setFormData({
+                              ...formData,
+                              fonctionnalites: selected
+                                ? formData.fonctionnalites.filter(x => x !== f)
+                                : [...formData.fonctionnalites, f]
+                            })}
+                            style={{
+                              padding: '6px 12px', borderRadius: '999px', fontSize: '0.85rem',
+                              border: selected ? '1px solid var(--primary)' : '1px solid #d1d5db',
+                              background: selected ? 'var(--primary)' : 'white',
+                              color: selected ? 'white' : '#374151',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            {selected && <i className="fa-solid fa-check" style={{ marginRight: '6px' }} />}
+                            {f}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {formData.fonctionnalites.filter(f => !fonctionnalitesDispo.includes(f)).length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {formData.fonctionnalites.filter(f => !fonctionnalitesDispo.includes(f)).map((f, idx) => (
+                        <span key={`custom-${idx}`} style={{
+                          padding: '6px 12px', borderRadius: '999px', fontSize: '0.85rem',
+                          background: '#ecfccb', color: '#3f6212',
+                          border: '1px solid #bef264', display: 'inline-flex', alignItems: 'center', gap: '6px'
+                        }}>
+                          {f}
+                          <button
+                            type="button"
+                            onClick={() => setFormData({
+                              ...formData,
+                              fonctionnalites: formData.fonctionnalites.filter(x => x !== f)
+                            })}
+                            style={{ background: 'none', border: 'none', color: '#3f6212', cursor: 'pointer', padding: 0, fontSize: '0.9rem' }}
+                            aria-label="Retirer"
+                          >
+                            <i className="fa-solid fa-xmark" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      type="text"
+                      placeholder="Ajouter une nouvelle fonctionnalité..."
+                      className="input"
+                      style={{ flex: 1 }}
+                      value={newFonc}
+                      onChange={e => setNewFonc(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const v = newFonc.trim();
+                          if (v && !formData.fonctionnalites.includes(v)) {
+                            setFormData({ ...formData, fonctionnalites: [...formData.fonctionnalites, v] });
+                          }
+                          setNewFonc('');
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => {
+                        const v = newFonc.trim();
+                        if (v && !formData.fonctionnalites.includes(v)) {
+                          setFormData({ ...formData, fonctionnalites: [...formData.fonctionnalites, v] });
+                        }
+                        setNewFonc('');
+                      }}
+                    >
+                      <i className="fa-solid fa-plus" /> Ajouter
+                    </button>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '0.85rem', color: '#6b7280', fontWeight: 'bold', marginLeft: '4px' }}>Photo de l'objet (Optionnelle)</label>

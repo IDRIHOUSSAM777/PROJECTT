@@ -44,6 +44,17 @@ def _ensure_wol_columns():
 
 _ensure_wol_columns()
 
+# Migration additive : colonne "vu" sur la table alertes (lecture par l'admin).
+def _ensure_alerte_columns():
+    from sqlalchemy import text
+    with db_engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE alertes ADD COLUMN IF NOT EXISTS vu BOOLEAN DEFAULT FALSE"))
+        except Exception as e:
+            print(f"⚠️ ALTER alertes.vu a échoué : {e}")
+
+_ensure_alerte_columns()
+
 app = FastAPI(title="SmartFind API")
 
 # Rate limiter partagé (stocke l'état dans Redis en prod via REDIS_URL si défini)

@@ -9,6 +9,34 @@ from data.database import get_db
 
 router = APIRouter(tags=["Gestion des Alertes (Admin)"])
 
+
+@router.get("/admin/alertes/unread_count")
+def get_unread_alertes_count(
+    db: Session = Depends(get_db),
+    current_user: models.Utilisateur = Depends(auth.get_current_admin),
+):
+    """Nombre d'alertes non-lues (non résolues et non vues par l'admin)."""
+    count = db.query(models.Alerte).filter(
+        models.Alerte.est_resolu == False,
+        models.Alerte.vu == False,
+    ).count()
+    return {"count": count}
+
+
+@router.post("/admin/alertes/mark_all_read")
+def mark_all_alertes_read(
+    db: Session = Depends(get_db),
+    current_user: models.Utilisateur = Depends(auth.get_current_admin),
+):
+    """Marque toutes les alertes non résolues comme lues par l'admin."""
+    updated = db.query(models.Alerte).filter(
+        models.Alerte.est_resolu == False,
+        models.Alerte.vu == False,
+    ).update({models.Alerte.vu: True}, synchronize_session=False)
+    db.commit()
+    return {"updated": updated}
+
+
 @router.get("/admin/alertes", response_model=List[schemas.AlerteResponse])
 def get_alertes(resolved: bool = False, db: Session = Depends(get_db), current_user: models.Utilisateur = Depends(auth.get_current_admin)):
     alertes = db.query(models.Alerte).filter(models.Alerte.est_resolu == resolved).all()

@@ -120,6 +120,34 @@ a {
   color: #fff;
 }
 
+.nav-item.nav-alerts {
+  position: relative;
+}
+
+.alerts-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #e11d48;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface, #fff);
+  pointer-events: none;
+  animation: alerts-badge-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes alerts-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--surface, #fff), 0 0 0 0 rgba(225, 29, 72, 0.55); }
+  50% { box-shadow: 0 0 0 2px var(--surface, #fff), 0 0 0 6px rgba(225, 29, 72, 0); }
+}
+
 .userbox {
   display: flex;
   align-items: center;
@@ -1080,83 +1108,269 @@ a {
 /* =========================================
    8. PROFIL.CSS
    ========================================= */
-.profile {
-  padding: 16px;
+.pf-wrap {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.pf-header {
+  position: relative;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: #fff;
+  box-shadow: 0 6px 24px rgba(16, 24, 40, .06);
+}
+
+.pf-banner {
+  height: 110px;
+  background: linear-gradient(135deg, #1e63ff 0%, #6a8dff 55%, #b5c7ff 100%);
+}
+
+.pf-header-body {
+  padding: 0 24px 20px;
+  margin-top: -48px;
+  display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-}
-
-.pf-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.pf-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  display: grid;
-  place-items: center;
-  font-weight: 950;
-  color: var(--primary);
-  background: var(--primary-50);
-  border: 1px solid rgba(30, 99, 255, .18);
-}
-
-.pf-name {
-  font-size: 24px;
-  font-weight: 950;
-}
-
-.pf-role {
-  margin-top: 6px;
-  color: var(--muted);
-  font-weight: 700;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.pf-meta {
-  margin-top: 10px;
-  display: flex;
-  gap: 10px;
+  gap: 18px;
   flex-wrap: wrap;
 }
 
-.pf-actions {
+.pf-header-left {
   display: flex;
-  flex-direction: column;
   align-items: flex-end;
-  gap: 10px;
-  min-width: 280px;
+  gap: 16px;
+  min-width: 0;
 }
 
-.pf-action-row {
+.pf-avatar-xl {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 34px;
+  font-weight: 950;
+  color: #fff;
+  background: linear-gradient(135deg, #1e63ff, #5c80ff);
+  border: 4px solid #fff;
+  box-shadow: 0 8px 22px rgba(30, 99, 255, .28);
+  flex-shrink: 0;
+}
+
+.pf-header-text {
+  padding-bottom: 6px;
+  min-width: 0;
+}
+
+.pf-display-name {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+
+.pf-display-sub {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pf-role-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--primary-50);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 12px;
+  border: 1px solid rgba(30, 99, 255, .2);
+}
+
+.pf-header-actions {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.pf-section {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.pf-section-title {
+  padding: 14px 18px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: #fbfcfe;
+}
+
+.pf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-row:last-child {
+  border-bottom: none;
+}
+
+.pf-row-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.pf-row-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.pf-row-value {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.pf-row-value.muted {
+  color: var(--muted);
+  letter-spacing: 0.2em;
+}
+
+.pf-btn-edit {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f4f6fb;
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+  white-space: nowrap;
+}
+
+.pf-btn-edit:hover {
+  background: #e9edf5;
+  border-color: #d5dbe7;
+}
+
+.pf-edit-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pf-edit-row {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.pf-edit-row > .input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.pf-edit-actions {
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
-.pf-lang-select {
-  width: 100%;
-  max-width: 300px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.pf-feedback {
+  margin: 8px 18px 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
-.pf-lang-select>span {
-  display: inline-flex;
+.pf-feedback.error {
+  background: #fef3f2;
+  color: #b42318;
+  border: 1px solid #fecdca;
+}
+
+.pf-feedback.success {
+  background: #ecfdf3;
+  color: #027a48;
+  border: 1px solid #abefc6;
+}
+
+.pf-pref-row {
+  display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pf-pref-row:last-child {
+  border-bottom: none;
+}
+
+.pf-pref-row .select {
+  max-width: 220px;
+}
+
+@media (max-width: 680px) {
+  .pf-header-body {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pf-header-actions {
+    width: 100%;
+  }
+
+  .pf-row,
+  .pf-pref-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .pf-btn-edit {
+    width: 100%;
+  }
+
+  .pf-edit-actions {
+    justify-content: stretch;
+  }
+
+  .pf-edit-actions .btn {
+    flex: 1;
+  }
 }
 
 .req {
@@ -1232,26 +1446,6 @@ a {
   justify-content: flex-end;
 }
 
-@media (max-width: 980px) {
-  .profile {
-    flex-direction: column;
-  }
-
-  .pf-actions {
-    width: 100%;
-    align-items: flex-start;
-    min-width: 0;
-  }
-
-  .pf-action-row {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .pf-lang-select {
-    max-width: none;
-  }
-}
 
 /* =========================================
    9. ADMIN.CSS

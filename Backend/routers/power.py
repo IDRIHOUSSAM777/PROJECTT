@@ -27,6 +27,56 @@ from data.redis_client import clear_search_cache, publish_status_change
 router = APIRouter(prefix="/objets", tags=["Power Management"])
 
 
+def auto_wake_if_needed(obj: models.Objet, db: Session) -> dict | None:
+    """
+    Réveille automatiquement l'équipement si (et seulement si) :
+      - il supporte le WoL (supports_wol = True)
+      - une MAC est renseignée
+      - son power_state n'est pas déjà "on"
+
+    Retourne un dict descriptif quand un Magic Packet a été envoyé, None sinon.
+    Échec silencieux : une erreur d'envoi n'interrompt pas l'action utilisateur
+    (l'équipement peut être déjà allumé sans que power_state ait été mis à jour).
+    """
+    if not obj.supports_wol or not obj.mac_adresse:
+        return None
+    if obj.power_state == "on":
+        return None
+
+    try:
+        send_magic_packet(obj.mac_adresse)
+    except Exception as e:
+        print(f"⚠️ [AUTO-WAKE] Magic Packet échoué pour {obj.mac_adresse}: {e}")
+        return None
+
+    now = datetime.utcnow()
+    obj.power_state = "on"
+    obj.last_wake_at = now
+    db.commit()
+    db.refresh(obj)
+
+    try:
+        clear_search_cache()
+    except Exception:
+        pass
+
+    try:
+        publish_status_change(
+            obj.id_objet,
+            obj.statut,
+            source="auto-wake",
+            extra={"power_state": "on"},
+        )
+    except Exception:
+        pass
+
+    return {
+        "mac_adresse": obj.mac_adresse,
+        "power_state": "on",
+        "triggered_at": now.isoformat() + "Z",
+    }
+
+
 def _build_thing_description(obj: models.Objet) -> dict:
     """
     Thing Description W3C WoT (v1.1) pour un équipement.
@@ -92,11 +142,15 @@ def _build_thing_description(obj: models.Objet) -> dict:
 def wake_objet(
     request: Request,
     id_objet: int,
-    current_user: models.Utilisateur = Depends(auth.get_current_user),
+    current_user: models.Utilisateur = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ):
     """
     Envoie un Magic Packet WoL vers l'adresse MAC de l'équipement.
+
+    Endpoint de maintenance (admin uniquement). Le chemin nominal pour les
+    utilisateurs passe par /objets/{id}/action : le réveil est alors déclenché
+    automatiquement par auto_wake_if_needed() avant l'invocation de l'action.
 
     Pré-conditions :
       - l'équipement existe

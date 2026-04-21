@@ -121,26 +121,6 @@ const Equipment = () => {
     }
   };
 
-  const wakeObjet = async () => {
-    if (actionBusy) return;
-    setActionBusy('wake');
-    try {
-      const res = await api.post(`/objets/${id}/wake`);
-      const msg = res?.data?.message || 'Magic Packet envoyé.';
-      setFeedback({ text: msg, type: 'success' });
-      loadData(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFeedback({
-        text: typeof detail === 'string' ? detail : 'Échec du réveil WoL',
-        type: 'error',
-      });
-    } finally {
-      setActionBusy('');
-      setTimeout(() => setFeedback({ text: '', type: '' }), 3500);
-    }
-  };
-
   const invokeAction = async (actionName) => {
     if (actionBusy) return;
     setActionBusy(actionName);
@@ -148,6 +128,7 @@ const Equipment = () => {
       const res = await api.post(`/objets/${id}/action`, { action: actionName });
       const msg = res?.data?.message || `Action "${actionName}" exécutée`;
       setFeedback({ text: msg, type: 'success' });
+      if (res?.data?.auto_wake) loadData(false);
     } catch (err) {
       const detail = err?.response?.data?.detail;
       setFeedback({ text: typeof detail === 'string' ? detail : `Échec de l'action ${actionName}`, type: 'error' });
@@ -231,27 +212,26 @@ const Equipment = () => {
           </div>
 
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-            {equipment.supports_wol && (
+            {equipment.localisation?.floor != null && (
               <button
                 type="button"
-                onClick={wakeObjet}
-                disabled={!!actionBusy}
-                title="Envoyer un Magic Packet Wake-on-LAN"
+                onClick={() => navigate(`/carte?etage=${equipment.localisation.floor}&objet=${id}`)}
+                title="Localiser sur la carte"
                 style={{
-                  background: actionBusy === 'wake' ? '#94a3b8' : '#f59e0b',
-                  color: 'white',
-                  border: 'none',
+                  background: '#ecfeff',
+                  color: '#0369a1',
+                  border: '1px solid #bae6fd',
                   padding: '10px 16px',
                   borderRadius: '8px',
-                  cursor: actionBusy ? 'wait' : 'pointer',
+                  cursor: 'pointer',
                   fontWeight: 'bold',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
                 }}
               >
-                <i className={`fa-solid ${actionBusy === 'wake' ? 'fa-spinner fa-spin' : 'fa-power-off'}`}></i>
-                {actionBusy === 'wake' ? 'Réveil…' : 'Réveiller (WoL)'}
+                <i className="fa-solid fa-location-dot"></i>
+                Voir sur la carte
               </button>
             )}
             {!isAdmin && (

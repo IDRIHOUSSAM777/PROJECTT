@@ -513,16 +513,6 @@ const Search = () => {
               </label>
 
               <label className="filter-field">
-                <span>{t('common.floor')}</span>
-                <select className="select" value={filters.etage} onChange={(e) => updateFilter('etage', e.target.value)}>
-                  <option value="">{t('common.all')}</option>
-                  {options.etages.map((e) => (
-                    <option key={e} value={e}>{t('search.floorPrefix')} {e}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="filter-field">
                 <span>{t('common.room')}</span>
                 <select className="select" value={filters.salle} onChange={(e) => updateFilter('salle', e.target.value)}>
                   <option value="">{t('common.allF')}</option>

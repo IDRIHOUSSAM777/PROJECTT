@@ -103,8 +103,6 @@ STATUS_KEYWORDS = {
     "Panne": {"panne", "hs", "error", "critical", "broken", "down", "معطل", "عطل"},
 }
 
-REGEX_FLOOR_1 = re.compile(r"(?:etage|étage|niveau|floor|طابق|الطابق)\s*(\d+)", re.IGNORECASE)
-REGEX_FLOOR_2 = re.compile(r"(\d+)\s*(?:er|e|eme)?\s*(?:etage|étage|niveau|floor)", re.IGNORECASE)
 REGEX_ROOM = re.compile(r"(?:salle|room|قاعة|غرفة)\s*([\w\-]+)", re.IGNORECASE)
 REGEX_IP = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
 REGEX_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
@@ -384,12 +382,6 @@ class NLPParser:
                 filters["statut"] = status
                 break
         
-        m_floor = REGEX_FLOOR_1.search(query) or REGEX_FLOOR_2.search(query)
-        if m_floor:
-            try: 
-                filters["num_etage"] = int(m_floor.group(1))
-                filters["etage_text_raw"] = m_floor.group(0)
-            except: pass
         m_room = REGEX_ROOM.search(query)
         if m_room and m_room.group(1): 
             exact_salle = self.resolve_salle_name(m_room.group(1).strip(), avail_salles)
@@ -498,7 +490,7 @@ class NLPParser:
         return corrected, corrections
 
     def translate_to_canonical(self, term: str) -> Optional[str]:
-        """Retourne la forme canonique FR d'un terme quelle que soit sa langue (FR/EN/AR/ES)."""
+        """Retourne la forme canonique FR d'un terme quelle que soit sa langue (FR/EN/AR)."""
         if not term:
             return None
         n = normalize_text(term)

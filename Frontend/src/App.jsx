@@ -83,12 +83,16 @@ function App() {
         } />
 
         {/* Routes Admin (Protégées aussi) */}
-        <Route path="/admin" element={
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin/dashboard" element={
           <PrivateRoute><Admin /></PrivateRoute>
         } />
-
-        {/* Redirection from old link just in case */}
-        <Route path="/admin/alerts" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/alerts" element={
+          <PrivateRoute><Admin /></PrivateRoute>
+        } />
+        <Route path="/admin/add" element={
+          <PrivateRoute><Admin /></PrivateRoute>
+        } />
 
         <Route path="/admin/inventory" element={
           <PrivateRoute><Inventory /></PrivateRoute>

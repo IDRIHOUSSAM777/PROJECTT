@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useI18n } from '../i18n';
 
-const emptyPrefs = {
+const emptyPasswordForm = {
   current_password: '',
   password: '',
   confirm_password: '',
@@ -13,9 +13,7 @@ const getErrorMessage = (err, fallback, validationLabel) => {
   const detail = err?.response?.data?.detail;
 
   if (Array.isArray(detail)) {
-    return detail
-      .map((d) => d?.msg || d?.message || validationLabel)
-      .join(', ');
+    return detail.map((d) => d?.msg || d?.message || validationLabel).join(', ');
   }
 
   if (typeof detail === 'string') {
@@ -31,11 +29,12 @@ const Profile = () => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const [prefsOpen, setPrefsOpen] = useState(false);
-  const [prefsForm, setPrefsForm] = useState(emptyPrefs);
-  const [prefsError, setPrefsError] = useState('');
-  const [prefsSuccess, setPrefsSuccess] = useState('');
-  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [editingField, setEditingField] = useState(null);
+  const [nomInput, setNomInput] = useState('');
+  const [prenomInput, setPrenomInput] = useState('');
+  const [passwordForm, setPasswordForm] = useState(emptyPasswordForm);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
   useEffect(() => {
     let mounted = true;
@@ -60,61 +59,107 @@ const Profile = () => {
     };
   }, [navigate]);
 
-  const openPreferences = () => {
-    setPrefsOpen(true);
-    setPrefsError('');
-    setPrefsSuccess('');
+  const resetEditState = () => {
+    setEditingField(null);
+    setPasswordForm(emptyPasswordForm);
+    setFeedback({ type: '', message: '' });
   };
 
-  const closePreferences = () => {
-    if (savingPrefs) return;
-    setPrefsOpen(false);
-    setPrefsError('');
-    setPrefsSuccess('');
-    setPrefsForm(emptyPrefs);
+  const openEdit = (field) => {
+    setEditingField(field);
+    setFeedback({ type: '', message: '' });
+    if (field === 'nom') setNomInput(user?.nom || '');
+    if (field === 'prenom') setPrenomInput(user?.prenom || '');
+    if (field === 'password') setPasswordForm(emptyPasswordForm);
   };
 
-  const onPrefsChange = (event) => {
-    const { name, value } = event.target;
-    setPrefsForm((prev) => ({ ...prev, [name]: value }));
-    if (prefsError) setPrefsError('');
-    if (prefsSuccess) setPrefsSuccess('');
+  const cancelEdit = () => {
+    if (saving) return;
+    resetEditState();
   };
 
-  const onSubmitPreferences = async (event) => {
+  const flashFeedback = (type, message) => {
+    setFeedback({ type, message });
+    if (type === 'success') {
+      setTimeout(() => {
+        setFeedback((prev) => (prev.message === message ? { type: '', message: '' } : prev));
+      }, 3500);
+    }
+  };
+
+  const submitNom = async (event) => {
     event.preventDefault();
-    setPrefsError('');
-    setPrefsSuccess('');
-
-    if (!prefsForm.current_password || !prefsForm.password || !prefsForm.confirm_password) {
-      setPrefsError(t('profile.fillAllFields'));
+    if (!nomInput.trim()) {
+      setFeedback({ type: 'error', message: t('profile.nameRequired') });
       return;
     }
+    try {
+      setSaving(true);
+      const res = await api.put('/users/me', { nom: nomInput.trim() });
+      setUser(res.data);
+      resetEditState();
+      flashFeedback('success', t('profile.nameUpdated'));
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: getErrorMessage(err, t('profile.saveFailed'), t('profile.validationError')),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    if (prefsForm.password.length < 6) {
-      setPrefsError(t('profile.passwordMin'));
+  const submitPrenom = async (event) => {
+    event.preventDefault();
+    if (!prenomInput.trim()) {
+      setFeedback({ type: 'error', message: t('profile.firstNameRequired') });
       return;
     }
+    try {
+      setSaving(true);
+      const res = await api.put('/users/me', { prenom: prenomInput.trim() });
+      setUser(res.data);
+      resetEditState();
+      flashFeedback('success', t('profile.firstNameUpdated'));
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: getErrorMessage(err, t('profile.saveFailed'), t('profile.validationError')),
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    if (prefsForm.password !== prefsForm.confirm_password) {
-      setPrefsError(t('profile.passwordMismatch'));
+  const submitPassword = async (event) => {
+    event.preventDefault();
+    const { current_password, password, confirm_password } = passwordForm;
+
+    if (!current_password || !password || !confirm_password) {
+      setFeedback({ type: 'error', message: t('profile.fillAllFields') });
+      return;
+    }
+    if (password.length < 6) {
+      setFeedback({ type: 'error', message: t('profile.passwordMin') });
+      return;
+    }
+    if (password !== confirm_password) {
+      setFeedback({ type: 'error', message: t('profile.passwordMismatch') });
       return;
     }
 
     try {
-      setSavingPrefs(true);
-
-      await api.put('/users/me', {
-        current_password: prefsForm.current_password,
-        password: prefsForm.password,
-      });
-
-      setPrefsSuccess(t('profile.passwordUpdated'));
-      setPrefsForm(emptyPrefs);
+      setSaving(true);
+      await api.put('/users/me', { current_password, password });
+      resetEditState();
+      flashFeedback('success', t('profile.passwordUpdated'));
     } catch (err) {
-      setPrefsError(getErrorMessage(err, t('profile.saveFailed'), t('profile.validationError')));
+      setFeedback({
+        type: 'error',
+        message: getErrorMessage(err, t('profile.saveFailed'), t('profile.validationError')),
+      });
     } finally {
-      setSavingPrefs(false);
+      setSaving(false);
     }
   };
 
@@ -126,106 +171,231 @@ const Profile = () => {
     return <div className="page-pad container">{t('profile.userNotFound')}</div>;
   }
 
-  const avatarText = `${user.nom?.[0] || ''}${user.prenom?.[0] || ''}`.trim() || 'U';
+  const isAdmin = user.email === 'admin@smartfind.com';
+  const avatarText = `${user.prenom?.[0] || ''}${user.nom?.[0] || ''}`.trim().toUpperCase() || 'U';
+  const roleLabel = translateData('role', isAdmin ? 'Admin' : 'Utilisateur');
 
   return (
     <main className="page-pad">
       <div className="container">
-        <section className="card profile">
-          <div className="pf-left">
-            <div className="pf-avatar">{avatarText.toUpperCase()}</div>
-            <div>
-              <div className="pf-name">{user.nom} {user.prenom}</div>
-              <div className="pf-role"><i className="fa-solid fa-shield-halved" /> {translateData('role', user.email === 'admin@smartfind.com' ? 'Admin' : 'Utilisateur')}</div>
-              <div className="pf-meta"><span className="pill">{user.email}</span></div>
+        <div className="pf-wrap">
+          <section className="pf-header">
+            <div className="pf-banner" />
+            <div className="pf-header-body">
+              <div className="pf-header-left">
+                <div className="pf-avatar-xl">{avatarText}</div>
+                <div className="pf-header-text">
+                  <div className="pf-display-name">{user.prenom} {user.nom}</div>
+                  <div className="pf-display-sub">
+                    <span className="pf-role-pill">
+                      <i className="fa-solid fa-shield-halved" /> {roleLabel}
+                    </span>
+                    <span><i className="fa-solid fa-envelope" /> {user.email}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="pf-header-actions">
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => {
+                    localStorage.removeItem('access_token');
+                    navigate('/login');
+                  }}
+                >
+                  <i className="fa-solid fa-right-from-bracket" /> {t('nav.logout')}
+                </button>
+              </div>
             </div>
-          </div>
+          </section>
 
-          <div className="pf-actions">
-            <div className="pf-action-row">
-              <button type="button" className="btn" onClick={openPreferences}>
-                <i className="fa-solid fa-sliders" /> {t('profile.preferences')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-danger"
-                onClick={() => {
-                  localStorage.removeItem('access_token');
-                  navigate('/login');
-                }}
-              >
-                {t('nav.logout')}
-              </button>
+          {feedback.message && (
+            <div className={`pf-feedback ${feedback.type}`} role="alert">
+              {feedback.message}
             </div>
-            <label className="pf-lang-select">
-              <span><i className="fa-solid fa-language" /> {t('common.language')}</span>
-              <select className="select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+          )}
+
+          <section className="pf-section">
+            <div className="pf-section-title">{t('profile.sectionAccount')}</div>
+
+            <div className="pf-row">
+              {editingField === 'prenom' ? (
+                <form className="pf-edit-form" onSubmit={submitPrenom}>
+                  <div className="pf-row-label">{t('profile.firstName')}</div>
+                  <div className="pf-edit-row">
+                    <input
+                      className="input"
+                      type="text"
+                      value={prenomInput}
+                      onChange={(e) => setPrenomInput(e.target.value)}
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <div className="pf-edit-actions">
+                    <button type="button" className="btn" onClick={cancelEdit} disabled={saving}>
+                      {t('profile.cancel')}
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                      {saving ? t('profile.saveInProgress') : t('profile.save')}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="pf-row-info">
+                    <div className="pf-row-label">{t('profile.firstName')}</div>
+                    <div className="pf-row-value">{user.prenom}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pf-btn-edit"
+                    onClick={() => openEdit('prenom')}
+                    disabled={isAdmin}
+                    title={isAdmin ? user.email : ''}
+                  >
+                    {t('profile.edit')}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="pf-row">
+              {editingField === 'nom' ? (
+                <form className="pf-edit-form" onSubmit={submitNom}>
+                  <div className="pf-row-label">{t('profile.lastName')}</div>
+                  <div className="pf-edit-row">
+                    <input
+                      className="input"
+                      type="text"
+                      value={nomInput}
+                      onChange={(e) => setNomInput(e.target.value)}
+                      autoFocus
+                      required
+                    />
+                  </div>
+                  <div className="pf-edit-actions">
+                    <button type="button" className="btn" onClick={cancelEdit} disabled={saving}>
+                      {t('profile.cancel')}
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                      {saving ? t('profile.saveInProgress') : t('profile.save')}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="pf-row-info">
+                    <div className="pf-row-label">{t('profile.lastName')}</div>
+                    <div className="pf-row-value">{user.nom}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pf-btn-edit"
+                    onClick={() => openEdit('nom')}
+                    disabled={isAdmin}
+                    title={isAdmin ? user.email : ''}
+                  >
+                    {t('profile.edit')}
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="pf-row">
+              <div className="pf-row-info">
+                <div className="pf-row-label">{t('profile.email')}</div>
+                <div className="pf-row-value">{user.email}</div>
+              </div>
+              <span className="pf-row-label" style={{ color: 'var(--muted)' }}>
+                <i className="fa-solid fa-lock" /> {t('profile.emailReadOnly')}
+              </span>
+            </div>
+          </section>
+
+          <section className="pf-section">
+            <div className="pf-section-title">{t('profile.sectionSecurity')}</div>
+
+            <div className="pf-row">
+              {editingField === 'password' ? (
+                <form className="pf-edit-form" onSubmit={submitPassword}>
+                  <div className="pf-row-label">{t('profile.changePassword')}</div>
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder={t('profile.currentPassword')}
+                    value={passwordForm.current_password}
+                    onChange={(e) => setPasswordForm((p) => ({ ...p, current_password: e.target.value }))}
+                    autoComplete="current-password"
+                    required
+                  />
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder={t('profile.newPassword')}
+                    value={passwordForm.password}
+                    onChange={(e) => setPasswordForm((p) => ({ ...p, password: e.target.value }))}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder={t('profile.confirmPassword')}
+                    value={passwordForm.confirm_password}
+                    onChange={(e) => setPasswordForm((p) => ({ ...p, confirm_password: e.target.value }))}
+                    autoComplete="new-password"
+                    required
+                  />
+                  <div className="pf-edit-actions">
+                    <button type="button" className="btn" onClick={cancelEdit} disabled={saving}>
+                      {t('profile.cancel')}
+                    </button>
+                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                      {saving ? t('profile.saveInProgress') : t('profile.save')}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <div className="pf-row-info">
+                    <div className="pf-row-label">{t('profile.password')}</div>
+                    <div className="pf-row-value muted">{t('profile.passwordHidden')}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="pf-btn-edit"
+                    onClick={() => openEdit('password')}
+                    disabled={isAdmin}
+                    title={isAdmin ? user.email : ''}
+                  >
+                    {t('profile.edit')}
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="pf-section">
+            <div className="pf-section-title">{t('profile.sectionPreferences')}</div>
+            <div className="pf-pref-row">
+              <div className="pf-row-info">
+                <div className="pf-row-label">{t('profile.interfaceLanguage')}</div>
+                <div className="pf-row-value" style={{ color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>
+                  <i className="fa-solid fa-language" /> {t('common.language')}
+                </div>
+              </div>
+              <select
+                className="select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
                 {languageOptions.map((option) => (
                   <option key={option.code} value={option.code}>{option.label}</option>
                 ))}
               </select>
-            </label>
-          </div>
-        </section>
-      </div>
-
-      <div className={`modal-backdrop ${prefsOpen ? 'open' : ''}`} onClick={closePreferences}>
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-head">
-            <h3><i className="fa-solid fa-key" /> {t('profile.changePassword')}</h3>
-            <button type="button" className="icon-btn" onClick={closePreferences} aria-label={t('common.cancel')}>
-              <i className="fa-solid fa-xmark" />
-            </button>
-          </div>
-
-          <form onSubmit={onSubmitPreferences}>
-            <div className="modal-body prefs-body">
-              <input
-                className="input"
-                type="password"
-                name="current_password"
-                placeholder={t('profile.currentPassword')}
-                value={prefsForm.current_password}
-                onChange={onPrefsChange}
-                autoComplete="current-password"
-                required
-              />
-
-              <input
-                className="input"
-                type="password"
-                name="password"
-                placeholder={t('profile.newPassword')}
-                value={prefsForm.password}
-                onChange={onPrefsChange}
-                autoComplete="new-password"
-                required
-              />
-
-              <input
-                className="input"
-                type="password"
-                name="confirm_password"
-                placeholder={t('profile.confirmPassword')}
-                value={prefsForm.confirm_password}
-                onChange={onPrefsChange}
-                autoComplete="new-password"
-                required
-              />
-
-              {prefsError && <div className="chip chip-busy prefs-message">{prefsError}</div>}
-              {prefsSuccess && <div className="chip chip-done prefs-message">{prefsSuccess}</div>}
             </div>
-
-            <div className="modal-foot prefs-foot">
-              <button type="button" className="btn" onClick={closePreferences} disabled={savingPrefs}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={savingPrefs}>
-                {savingPrefs ? t('profile.saveInProgress') : t('common.save')}
-              </button>
-            </div>
-          </form>
+          </section>
         </div>
       </div>
     </main>

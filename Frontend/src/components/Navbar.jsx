@@ -28,13 +28,6 @@ const formatRelativeTime = (value, language) => {
     return `${Math.floor(diffMs / day)} d ago`;
   }
 
-  if (language === 'es') {
-    if (diffMs < minute) return 'ahora';
-    if (diffMs < hour) return `hace ${Math.floor(diffMs / minute)} min`;
-    if (diffMs < day) return `hace ${Math.floor(diffMs / hour)} h`;
-    return `hace ${Math.floor(diffMs / day)} d`;
-  }
-
   if (language === 'ar') {
     if (diffMs < minute) return 'الآن';
     if (diffMs < hour) return `منذ ${Math.floor(diffMs / minute)} دقيقة`;
@@ -55,7 +48,9 @@ const Navbar = () => {
 
   const [user, setUser] = useState(null);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [unreadAlerts, setUnreadAlerts] = useState(0);
   const token = localStorage.getItem('access_token');
+  const isAdmin = user?.email === 'admin@smartfind.com';
 
   useEffect(() => {
     if (!token) return;
@@ -66,6 +61,38 @@ const Navbar = () => {
         navigate('/login');
       });
   }, [token, navigate]);
+
+  useEffect(() => {
+    if (!token || !isAdmin) {
+      setUnreadAlerts(0);
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchCount = () => {
+      api.get('/admin/alertes/unread_count')
+        .then((res) => {
+          if (!cancelled) setUnreadAlerts(Number(res.data?.count) || 0);
+        })
+        .catch(() => { /* silencieux : 0 par défaut */ });
+    };
+
+    fetchCount();
+    const pollId = setInterval(fetchCount, 20000);
+
+    const onRead = () => setUnreadAlerts(0);
+    const onNew = () => fetchCount();
+    window.addEventListener('admin:alerts:read', onRead);
+    window.addEventListener('admin:alerts:new', onNew);
+
+    return () => {
+      cancelled = true;
+      clearInterval(pollId);
+      window.removeEventListener('admin:alerts:read', onRead);
+      window.removeEventListener('admin:alerts:new', onNew);
+    };
+  }, [token, isAdmin]);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
@@ -147,9 +174,20 @@ const Navbar = () => {
           </Link>
         )}
         {user?.email === 'admin@smartfind.com' && (
-          <Link className={`nav-item ${isActive(['/admin', '/admin/inventory'])}`} to="/admin">
-            <i className="fa-solid fa-shield-halved" />
-            <span>{t('nav.admin')}</span>
+          <Link className={`nav-item ${isActive(['/admin', '/admin/dashboard', '/admin/inventory', '/admin/add'])}`} to="/admin/dashboard">
+            <i className="fa-solid fa-chart-pie" />
+            <span>{t('nav.dashboard')}</span>
+          </Link>
+        )}
+        {user?.email === 'admin@smartfind.com' && (
+          <Link className={`nav-item nav-alerts ${isActive('/admin/alerts')}`} to="/admin/alerts">
+            <i className="fa-solid fa-bell" />
+            <span>{t('nav.alerts')}</span>
+            {unreadAlerts > 0 && (
+              <span className="alerts-badge" aria-label={`${unreadAlerts} ${t('nav.alerts')}`}>
+                {unreadAlerts > 99 ? '99+' : unreadAlerts}
+              </span>
+            )}
           </Link>
         )}
       </nav>

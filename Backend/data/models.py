@@ -50,6 +50,7 @@ class Alerte(Base):
     source = Column(String) # "Utilisateur" ou "IoT"
     date_alerte = Column(DateTime, default=datetime.utcnow)
     est_resolu = Column(Boolean, default=False) # True quand l'admin a traité le problème
+    vu = Column(Boolean, default=False, index=True) # True dès que l'admin consulte la page Alerts
 
     # Clés étrangères
     id_objet = Column(Integer, ForeignKey("objets.id_objet"), index=True)

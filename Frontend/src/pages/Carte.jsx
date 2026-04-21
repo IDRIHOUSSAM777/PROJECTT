@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useI18n } from '../i18n';
 
@@ -10,6 +10,9 @@ import { useI18n } from '../i18n';
 const Carte = () => {
     const { t, translateData } = useI18n();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const paramEtage = searchParams.get('etage');
+    const paramObjet = searchParams.get('objet');
 
     const [etages, setEtages] = useState([]);
     const [salles, setSalles] = useState([]);
@@ -54,10 +57,15 @@ const Carte = () => {
                 const floorList = res.data?.etages || [];
                 setEtages(floorList);
                 setSalles(res.data?.salles || []);
-                if (floorList.length > 0) setSelectedEtage(floorList[0]);
+                // Pré-sélectionne l'étage depuis l'URL (?etage=…) si disponible, sinon le 1er
+                const wantedEtage = paramEtage != null ? parseInt(paramEtage, 10) : null;
+                const initialEtage = (wantedEtage != null && floorList.includes(wantedEtage))
+                    ? wantedEtage
+                    : (floorList.length > 0 ? floorList[0] : null);
+                if (initialEtage !== null) setSelectedEtage(initialEtage);
             })
             .catch((err) => console.error("Error loading map filters:", err));
-    }, []);
+    }, [paramEtage]);
 
     useEffect(() => {
         if (selectedEtage === null) return;
@@ -65,10 +73,18 @@ const Carte = () => {
         setSelectedObjet(null);
         setSelectedRoom(null);
         api.get(`/search?etage=${selectedEtage}`)
-            .then((res) => setObjets(Array.isArray(res.data) ? res.data : []))
+            .then((res) => {
+                const list = Array.isArray(res.data) ? res.data : [];
+                setObjets(list);
+                // Auto-sélectionne l'objet ciblé via ?objet=…
+                if (paramObjet) {
+                    const target = list.find(o => String(o.id_objet) === String(paramObjet));
+                    if (target) setSelectedObjet(target);
+                }
+            })
             .catch((err) => console.error("Error fetching map objects:", err))
             .finally(() => setLoading(false));
-    }, [selectedEtage]);
+    }, [selectedEtage, paramObjet]);
 
     // ── COMPUTED ────────────────────────────────────
     const sallesActuelles = useMemo(() => salles.filter(s => s.num_etage === selectedEtage), [salles, selectedEtage]);
@@ -371,12 +387,20 @@ const Carte = () => {
                 const slot = roomSlotMap[point.id_salle];
                 if (!slot) return null;
 
-                const h1 = (point.id_objet * 17) % 100;
-                const h2 = (point.id_objet * 31) % 100;
-                const cx = slot.x + slot.w / 2;
-                const cy = slot.y + slot.h / 2 - 1;
-                const fx = cx + (h1 / 100) * slot.w * 0.4 - slot.w * 0.2;
-                const fy = cy + (h2 / 100) * slot.h * 0.25 - slot.h * 0.125;
+                let fx, fy;
+                if (point.pos_x != null && point.pos_y != null) {
+                    // Position réelle capturée à l'ajout (pos_x / pos_y = % 0-100 dans la salle)
+                    fx = slot.x + (point.pos_x / 100) * slot.w;
+                    fy = slot.y + (point.pos_y / 100) * slot.h;
+                } else {
+                    // Fallback: objets legacy sans position — dispersion déterministe dans la salle
+                    const h1 = (point.id_objet * 17) % 100;
+                    const h2 = (point.id_objet * 31) % 100;
+                    const cx = slot.x + slot.w / 2;
+                    const cy = slot.y + slot.h / 2 - 1;
+                    fx = cx + (h1 / 100) * slot.w * 0.4 - slot.w * 0.2;
+                    fy = cy + (h2 / 100) * slot.h * 0.25 - slot.h * 0.125;
+                }
 
                 return renderPin(point, fx, fy);
             })}

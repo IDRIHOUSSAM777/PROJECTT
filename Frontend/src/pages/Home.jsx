@@ -360,16 +360,6 @@ const Home = () => {
                     </label>
 
                     <label className="hero-filter-field">
-                      <span>{t('common.floor')}</span>
-                      <select className="select" value={filters.etage} onChange={(e) => updateFilter('etage', e.target.value)}>
-                        <option value="">{t('common.all')}</option>
-                        {filterOptions.etages.map((etage) => (
-                          <option key={etage} value={etage}>{t('search.floorPrefix')} {etage}</option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <label className="hero-filter-field">
                       <span>{t('common.room')}</span>
                       <select className="select" value={filters.salle} onChange={(e) => updateFilter('salle', e.target.value)}>
                         <option value="">{t('common.allF')}</option>
@@ -400,7 +390,7 @@ const Home = () => {
           <section className="recommendations" style={{ marginBottom: 20 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
               <i className="fa-solid fa-sparkles" style={{ color: 'var(--primary)' }} />
-              {language === 'ar' ? 'مقترح لك' : language === 'en' ? 'For you' : language === 'es' ? 'Para ti' : 'Pour vous'}
+              {language === 'ar' ? 'مقترح لك' : language === 'en' ? 'For you' : 'Pour vous'}
             </h3>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
               {recommendations.map((r) => (
