@@ -199,3 +199,50 @@ class FavoriResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- Actions utilisateur → équipement ---
+class ActionSpec(BaseModel):
+    """Spec d'une action disponible, exposée au frontend pour rendu dynamique."""
+    key: str
+    label_fr: str
+    input_kind: str  # none | file | url | text
+    accept: Optional[str] = None
+    max_size: Optional[int] = None
+    placeholder: Optional[str] = None
+    optional: Optional[bool] = None
+    returns: str = "none"  # none | file | session_url
+
+
+class TaskStatusResponse(BaseModel):
+    id_task: int
+    id_objet: int
+    action: str
+    status: str  # pending | dispatched | running | success | failed | timeout
+    payload_path: Optional[str] = None
+    payload_text: Optional[str] = None
+    result_path: Optional[str] = None
+    result_url: Optional[str] = None
+    error: Optional[str] = None
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ActionDispatchResponse(BaseModel):
+    """Retour immédiat après POST /objets/{id}/action."""
+    task_id: int
+    status: str
+    message: str
+    auto_wake: Optional[dict] = None
+    result_url: Optional[str] = None  # rempli si action synchrone (visio)
+
+
+class AgentCallback(BaseModel):
+    """Payload envoyé par l'agent local quand une tâche se termine."""
+    task_id: int
+    status: str  # success | failed | running
+    result_url: Optional[str] = None
+    error: Optional[str] = None

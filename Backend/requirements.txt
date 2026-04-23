@@ -14,3 +14,4 @@ redis
 slowapi
 sib-api-v3-sdk
 wakeonlan
+httpx

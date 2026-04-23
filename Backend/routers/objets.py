@@ -19,17 +19,20 @@ def create_objet(
     current_user: models.Utilisateur = Depends(auth.get_current_admin),
     db: Session = Depends(get_db)
 ):
+    # WoL activé automatiquement dès qu'une MAC est présente : le système
+    # enverra un Magic Packet lors de l'invocation d'une action utilisateur.
     db_objet = models.Objet(
-        nom_model=objet.nom_model, 
+        nom_model=objet.nom_model,
         nom_marque=objet.nom_marque,
-        type_objet=objet.type_objet, 
+        type_objet=objet.type_objet,
         description=objet.description,
-        id_salle=objet.id_salle, 
+        id_salle=objet.id_salle,
         mac_adresse=objet.mac_adresse,
         ip_adress=objet.ip_adress,
         pos_x=objet.pos_x,
         pos_y=objet.pos_y,
-        statut="Disponible" 
+        supports_wol=bool((objet.mac_adresse or "").strip()),
+        statut="Disponible",
     )
     
     for nom_fonc in objet.fonctionnalites:

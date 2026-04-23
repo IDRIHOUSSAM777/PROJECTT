@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
+import ChatbotWidget from './components/ChatbotWidget';
 
 // Import des pages
 import Login from './pages/Login';
@@ -106,6 +107,9 @@ function App() {
         <Route path="*" element={<Navigate to="/" />} />
 
       </Routes>
+
+      {/* Chatbot d'assistance — s'auto-cache sur /login, /signup, etc. */}
+      <ChatbotWidget />
     </BrowserRouter>
   );
 }

@@ -13,7 +13,7 @@ const EditEquipment = () => {
     const [types, setTypes] = useState([]);
     const [fonctionnalitesDispo, setFonctionnalitesDispo] = useState([]);
     const [formData, setFormData] = useState({
-        nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: '', statut: '', supports_wol: false
+        nom_marque: '', nom_model: '', type_objet: '', description: '', mac_adresse: '', ip_adress: '', id_salle: '', pos_x: null, pos_y: null, photo: null, fonctionnalites: '', statut: ''
     });
 
     useEffect(() => {
@@ -49,7 +49,6 @@ const EditEquipment = () => {
                     photo: null,
                     statut: eq.statut || '',
                     fonctionnalites: eq.fonctionnalites ? eq.fonctionnalites.map(f => f.nom || f).join(', ') : '',
-                    supports_wol: !!eq.supports_wol,
                 });
                 setLoading(false);
             } catch (err) {

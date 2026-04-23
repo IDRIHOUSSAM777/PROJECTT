@@ -174,7 +174,7 @@ const Navbar = () => {
           </Link>
         )}
         {user?.email === 'admin@smartfind.com' && (
-          <Link className={`nav-item ${isActive(['/admin', '/admin/dashboard', '/admin/inventory', '/admin/add'])}`} to="/admin/dashboard">
+          <Link className={`nav-item ${isActive(['/admin/dashboard', '/admin/inventory', '/admin/add'])}`} to="/admin/dashboard">
             <i className="fa-solid fa-chart-pie" />
             <span>{t('nav.dashboard')}</span>
           </Link>

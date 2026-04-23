@@ -135,5 +135,36 @@ class Historique(Base):
     date_his = Column(DateTime, default=datetime.utcnow)
     requete_search = Column(String)
     id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), index=True)
-    
+
     utilisateur = relationship("Utilisateur", back_populates="historiques")
+
+
+class DeviceTask(Base):
+    """
+    Tâche envoyée à un équipement interactif (Imprimante, Scanner, Projecteur,
+    Écran, Visio). Persistée pour historique, debug et polling côté frontend.
+
+    Cycle de vie :
+        pending → dispatched → running → success | failed | timeout
+
+    payload_path : fichier téléversé par l'utilisateur (PDF, image), relatif à uploads/.
+    result_path  : fichier retourné par l'agent (ex: PDF scanné).
+    result_url   : lien généré côté backend (ex: URL Jitsi pour la visio).
+    """
+    __tablename__ = "device_tasks"
+
+    id_task = Column(Integer, primary_key=True, index=True)
+    id_objet = Column(Integer, ForeignKey("objets.id_objet"), index=True, nullable=False)
+    id_utilisateur = Column(Integer, ForeignKey("utilisateurs.id_utilisateur"), index=True, nullable=True)
+    action = Column(String, index=True, nullable=False)
+    status = Column(String, default="pending", index=True)
+    payload_path = Column(String, nullable=True)
+    payload_text = Column(String, nullable=True)
+    result_path = Column(String, nullable=True)
+    result_url = Column(String, nullable=True)
+    error = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    objet = relationship("Objet")
+    utilisateur = relationship("Utilisateur")

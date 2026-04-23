@@ -21,7 +21,7 @@ from data.redis_client import clear_search_cache, redis_client, publish_status_c
 HEARTBEAT_WATCHER_INTERVAL = 30
 
 # Imports des Routers
-from routers import users, objets, search, alertes, iot, public, admin, favoris, realtime, power
+from routers import users, objets, search, alertes, iot, public, admin, favoris, realtime, power, actions as device_actions, chat
 
 # Création des tables
 Base.metadata.create_all(bind=db_engine)
@@ -205,6 +205,8 @@ app.include_router(admin.router)
 app.include_router(favoris.router)
 app.include_router(realtime.router)
 app.include_router(power.router)
+app.include_router(device_actions.router)
+app.include_router(chat.router)
 
 if __name__ == "__main__":
     import uvicorn

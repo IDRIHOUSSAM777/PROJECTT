@@ -226,61 +226,10 @@ def receive_status_webhook(
 # Exécute une action exposée par le Thing Description (cf. /objets/{id}/td).
 # L'action doit correspondre à une fonctionnalité de l'objet.
 # ----------------------------------------------------------------------------
-@router.post("/objets/{objet_id}/action", tags=["Web of Things (W3C)"])
-def invoke_action(
-    objet_id: int,
-    action: Optional[str] = None,
-    body: Optional[dict] = Body(None),
-    current_user: models.Utilisateur = Depends(auth.get_current_user),
-    db: Session = Depends(get_db),
-):
-    # action peut venir en query param (?action=…) ou en body { "action": "…" }
-    action_name = (action or (body or {}).get("action") or "").strip().lower()
-    if not action_name:
-        raise HTTPException(400, "Paramètre 'action' requis")
+# NOTE : l'ancien endpoint POST /objets/{objet_id}/action (simulation Redis)
+# a été remplacé par le router `actions.py` qui persiste en DB + dispatch
+# vers l'agent local de l'équipement. Voir Backend/routers/actions.py.
 
-    objet = db.query(models.Objet).filter(models.Objet.id_objet == objet_id).first()
-    if not objet:
-        raise HTTPException(404, "Objet introuvable")
-
-    if objet.statut in ("Panne", "Signalé"):
-        raise HTTPException(409, f"Objet indisponible (statut: {objet.statut})")
-
-    fonctions_dispo = {f.nom.lower() for f in objet.fonctionnalites}
-    if action_name not in fonctions_dispo:
-        raise HTTPException(
-            400,
-            f"Action '{action_name}' non supportée. Disponibles: {sorted(fonctions_dispo)}",
-        )
-
-    # Auto-réveil : si l'objet supporte WoL et dort, on envoie le Magic Packet
-    # avant de publier l'action. Transparent pour l'utilisateur — il clique
-    # juste sur "Imprimer" et le système prend en charge la mise sous tension.
-    from routers.power import auto_wake_if_needed
-    wake_info = auto_wake_if_needed(objet, db)
-
-    # Simulation d'exécution : on émet un événement "action invoquée" sur Pub/Sub.
-    # Une vraie passerelle IoT s'abonnerait à ce canal pour piloter l'objet réel.
-    user_id = current_user.id_utilisateur if current_user.id_utilisateur != 0 else None
-    publish_event("channel:actions", {
-        "id_objet": objet_id,
-        "action": action_name,
-        "invoked_by": user_id,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "auto_wake": bool(wake_info),
-    })
-
-    message = f"Action '{action_name}' envoyée à l'objet"
-    if wake_info:
-        message = f"Équipement réveillé, action '{action_name}' envoyée"
-
-    return {
-        "status": "invoked",
-        "id_objet": objet_id,
-        "action": action_name,
-        "message": message,
-        "auto_wake": wake_info,
-    }
 
 @router.get("/objets/{objet_id}/td", tags=["Web of Things (W3C)"])
 def get_thing_description(objet_id: int, db: Session = Depends(get_db)):

@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../services/api';
 import { useI18n } from '../i18n';
+import ActionModal from '../components/ActionModal';
+
+const INTERACTIVE_TYPES_RE = /(imprim|projecteur|écran intelligent|ecran intelligent|visioconf)/i;
+const isInteractiveType = (type) => INTERACTIVE_TYPES_RE.test(String(type || ''));
 
 const formatDistance = (value, t, locale) => {
   const n = Number(value);
@@ -38,7 +42,6 @@ const Equipment = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [actionLoading, setActionLoading] = useState(false);
   const [feedback, setFeedback] = useState({ text: '', type: '' });
   const [isAdmin, setIsAdmin] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
@@ -47,7 +50,7 @@ const Equipment = () => {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportText, setReportText] = useState('');
   const [reportBusy, setReportBusy] = useState(false);
-  const [actionBusy, setActionBusy] = useState('');
+  const [actionModalOpen, setActionModalOpen] = useState(false);
 
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -117,23 +120,6 @@ const Equipment = () => {
       setFeedback({ text: typeof detail === 'string' ? detail : 'Échec du signalement', type: 'error' });
     } finally {
       setReportBusy(false);
-      setTimeout(() => setFeedback({ text: '', type: '' }), 3000);
-    }
-  };
-
-  const invokeAction = async (actionName) => {
-    if (actionBusy) return;
-    setActionBusy(actionName);
-    try {
-      const res = await api.post(`/objets/${id}/action`, { action: actionName });
-      const msg = res?.data?.message || `Action "${actionName}" exécutée`;
-      setFeedback({ text: msg, type: 'success' });
-      if (res?.data?.auto_wake) loadData(false);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      setFeedback({ text: typeof detail === 'string' ? detail : `Échec de l'action ${actionName}`, type: 'error' });
-    } finally {
-      setActionBusy('');
       setTimeout(() => setFeedback({ text: '', type: '' }), 3000);
     }
   };
@@ -370,42 +356,12 @@ const Equipment = () => {
             <h3>{t('common.features')}</h3>
             {Array.isArray(equipment.fonctionnalites) && equipment.fonctionnalites.length > 0 ? (
               <ul className="equip-list">
-                {equipment.fonctionnalites.map((feature) => {
-                  const actionName = String(feature || '').toLowerCase();
-                  const busy = actionBusy === actionName;
-                  return (
-                    <li key={feature} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <i className="fa-solid fa-check" />
-                        <span>{feature}</span>
-                      </span>
-                      {!isAdmin && isAvailableStatus(equipment.status) && (
-                        <button
-                          type="button"
-                          onClick={() => invokeAction(actionName)}
-                          disabled={!!actionBusy}
-                          title={`Actionner : ${feature}`}
-                          style={{
-                            background: busy ? '#94a3b8' : 'var(--primary)',
-                            color: 'white',
-                            border: 'none',
-                            padding: '6px 12px',
-                            borderRadius: '6px',
-                            cursor: busy ? 'wait' : 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: 'bold',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                          }}
-                        >
-                          <i className={`fa-solid ${busy ? 'fa-spinner fa-spin' : 'fa-play'}`}></i>
-                          {busy ? '...' : 'Actionner'}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
+                {equipment.fonctionnalites.map((feature) => (
+                  <li key={feature} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <i className="fa-solid fa-check" />
+                    <span>{feature}</span>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="equip-empty">{t('equipment.noFeatures')}</p>
@@ -418,6 +374,46 @@ const Equipment = () => {
               {equipment.description || t('equipment.noDescription')}
             </p>
           </article>
+
+          {isInteractiveType(equipment.type) && isAvailableStatus(equipment.status) && (
+            <article
+              className="card equip-block"
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+                textAlign: 'center',
+                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                border: '1px solid #bfdbfe',
+              }}
+            >
+              <h3 style={{ margin: 0 }}>Actionner l'équipement</h3>
+              <button
+                type="button"
+                onClick={() => setActionModalOpen(true)}
+                title="Exécuter une action sur cet équipement"
+                style={{
+                  background: '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  padding: '14px 28px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: '1.05rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  boxShadow: '0 6px 16px rgba(37, 99, 235, 0.35)',
+                }}
+              >
+                <i className="fa-solid fa-bolt"></i>
+                Action
+              </button>
+            </article>
+          )}
 
         </section>
       </div>
@@ -490,6 +486,12 @@ const Equipment = () => {
           </div>
         </div>
       )}
+
+      <ActionModal
+        objet={equipment}
+        open={actionModalOpen}
+        onClose={() => { setActionModalOpen(false); loadData(false); }}
+      />
     </main>
   );
 };
